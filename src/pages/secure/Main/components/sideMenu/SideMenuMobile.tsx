@@ -66,14 +66,14 @@ export default function SideMenuMobile({ open, toggleDrawer }: SideMenuMobilePro
           >
             <Avatar
               sizes="small"
-              alt={operator.society?.name || 'User'}
-              src={operator.society?.picture || '/profile.png'}
+              alt={operator.name || 'User'}
+              src={operator.picture || '/profile.png'}
               sx={{ width: 36, height: 36 }}
             >
               <PersonRounded />
             </Avatar>
             <Typography component="p" variant="h6">
-              {operator.user.name} {operator.user.surname}
+              {operator.name} {operator.surname}
             </Typography>
           </Stack>
           <NotificationIconDropdown />
