@@ -1,67 +1,49 @@
 import { createContext, useState, useContext, ReactNode } from 'react';
-import SocietyOperator from '@/models/SocietyOperator';
+import Operator from '@/models/Operator';
 
 interface SessionContextProps {
-  operator: SocietyOperator;
-  setOperator: (operator: SocietyOperator | null) => void;
+  operator: Operator;
+  setOperator: (operator: Operator | null) => void;
 }
 
 const SessionContext = createContext<SessionContextProps>({
   operator: {
     operator_id: -1,
-    user_id: -1,
-    society_id: -1,
-    session_id: '',
-    auth_token: '',
-    user: { user_id: -1, name: '', surname: '', email: '', picture: '' },
-    society: { society_id: -1, name: '', email: '', picture: '' },
+    name: '', 
+    surname: '', 
+    picture: '',
+    email: '', 
+    session_id: '', 
+    auth_token: ''
   },
   setOperator: () => {},
 });
 
 export const SessionProvider = ({ children }: { children: ReactNode }) => {
-  const [operator, setOperatorState] = useState<SocietyOperator>(() => ({
+  const [operator, setOperatorState] = useState<Operator>(() => ({
     operator_id: parseInt(localStorage.getItem('operator_id') || '-1', 10),
-    user_id: parseInt(localStorage.getItem('user_id') || '-1', 10),
-    society_id: parseInt(localStorage.getItem('society_id') || '-1', 10),
+      name: localStorage.getItem('name') || '',
+      surname: localStorage.getItem('surname') || '',
+      email: localStorage.getItem('email') || '',
+      picture: localStorage.getItem('picture') || '',
     session_id: localStorage.getItem('session_id') || '',
-    auth_token: localStorage.getItem('auth_token') || '',
-    user: {
-      user_id: parseInt(localStorage.getItem('user_id') || '-1', 10),
-      name: localStorage.getItem('user_name') || '',
-      surname: localStorage.getItem('user_surname') || '',
-      email: localStorage.getItem('user_email') || '',
-      picture: localStorage.getItem('user_picture') || '',
-    },
-    society: {
-      society_id: parseInt(localStorage.getItem('society_id') || '-1', 10),
-      name: localStorage.getItem('society_name') || '',
-      email: localStorage.getItem('society_email') || '',
-      picture: localStorage.getItem('society_picture') || '',
-    },
+    auth_token: localStorage.getItem('auth_token') || ''
   }));
 
-  const setOperator = (operator: SocietyOperator | null) => {
+  const setOperator = (operator: Operator | null) => {
     if (operator) {
       localStorage.setItem('operator_id', operator.operator_id.toString());
-      localStorage.setItem('user_id', operator.user_id.toString());
-      localStorage.setItem('society_id', operator.society_id.toString());
       localStorage.setItem('session_id', operator.session_id || '');
       localStorage.setItem('auth_token', operator.auth_token || '');
-      localStorage.setItem('user_name', operator.user.name || '');
-      localStorage.setItem('user_surname', operator.user.surname || '');
-      localStorage.setItem('user_email', operator.user.email || '');
-      localStorage.setItem('user_picture', operator.user.picture || '/profile.png');
-      localStorage.setItem('society_name', operator.society?.name || '');
-      localStorage.setItem('society_email', operator.society?.email || '');
-      localStorage.setItem('society_picture', operator.society?.picture || '');
+      localStorage.setItem('name', operator.name || '');
+      localStorage.setItem('surname', operator.surname || '');
+      localStorage.setItem('email', operator.email || '');
+      localStorage.setItem('picture', operator.picture || '/profile.png');
       setOperatorState(operator);
     } else {
-      ['operator_id','user_id','society_id','session_id','auth_token','user_name','user_surname','user_email','user_picture','society_name','society_email','society_picture'].forEach(k => localStorage.removeItem(k));
+      ['operator_id','session_id','auth_token','name','surname','email','picture'].forEach(k => localStorage.removeItem(k));
       setOperatorState({
-        operator_id: -1, user_id: -1, society_id: -1, session_id: '', auth_token: '',
-        user: { user_id: -1, name: '', surname: '', email: '', picture: '' },
-        society: { society_id: -1, name: '', email: '', picture: '' },
+        operator_id: -1, session_id: '', auth_token: '', name: '', surname: '', email: '', picture: ''
       });
     }
   };

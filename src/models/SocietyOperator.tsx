@@ -1,4 +1,4 @@
-export default interface SocietyOperator {
+export default interface Operator {
   operator_id: number;
   user_id: number;
   society_id: number;
