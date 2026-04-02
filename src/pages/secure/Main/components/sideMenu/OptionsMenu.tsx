@@ -55,7 +55,7 @@ export default function OptionsMenu({ collapsed }: { collapsed: boolean }) {
         borderColor: 'divider'
       }}>
       <Avatar
-        alt={operator.society?.name || 'User'} src={operator.society?.picture || '/static/images/avatar/default.png'}
+        alt={operator.name || 'User'} src={operator.picture || '/static/images/avatar/default.png'}
         sx={{
           width: 36,
           height: 36,
@@ -75,7 +75,7 @@ export default function OptionsMenu({ collapsed }: { collapsed: boolean }) {
               textOverflow: 'ellipsis', // Mostra i puntini di sospensione
             }}
           >
-            {operator.user.name} {operator.user.surname}
+            {operator.name} {operator.surname}
           </Typography>
           <Typography
             variant="caption"
@@ -86,7 +86,7 @@ export default function OptionsMenu({ collapsed }: { collapsed: boolean }) {
               textOverflow: 'ellipsis', // Mostra i puntini di sospensione
             }}
           >
-            {operator.user.email}
+            {operator.email}
           </Typography>
         </Box>
       )}
