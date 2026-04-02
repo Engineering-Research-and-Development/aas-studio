@@ -50,7 +50,7 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
           <Box
             component="img"
             src="/logo.png"
-            alt="BookIt"
+            alt="AAS Studio"
             sx={{ height: 48, mb: 1, objectFit: 'contain' }}
           />
           <Typography variant="subtitle1" color="text.secondary">
