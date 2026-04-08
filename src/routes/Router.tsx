@@ -1,11 +1,9 @@
 import { Routes, Route } from 'react-router-dom';
 import SignIn from '@/pages/public/SignIn/SignIn';
 import ProtectedRoute from '@/routes/ProtectedRoutes';
-import Main from '@/pages/secure/Main/Main';
 import AASEditor from '@/pages/secure/AASEditor/AASEditor';
 import AASLifecycle from '@/pages/secure/AASLifecycle/AASLifecycle';
 import AASServer from '@/pages/secure/AASServer/AASServer';
-import { AASProvider } from '@/context/AASContext';
 
 const Router = () => (
   <Routes>
@@ -14,9 +12,7 @@ const Router = () => (
       path="editor"
       element={
         <ProtectedRoute>
-          <AASProvider>
-            <Main><AASEditor /></Main>
-          </AASProvider>
+            <AASEditor />
         </ProtectedRoute>
       }
     />
@@ -24,9 +20,7 @@ const Router = () => (
       path="lifecycle"
       element={
         <ProtectedRoute>
-          <AASProvider>
-            <Main><AASLifecycle /></Main>
-          </AASProvider>
+           <AASLifecycle />
         </ProtectedRoute>
       }
     />
@@ -34,9 +28,7 @@ const Router = () => (
       path="server"
       element={
         <ProtectedRoute>
-          <AASProvider>
-            <Main><AASServer /></Main>
-          </AASProvider>
+            <AASServer />
         </ProtectedRoute>
       }
     />
