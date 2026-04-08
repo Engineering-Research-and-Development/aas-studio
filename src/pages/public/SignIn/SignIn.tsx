@@ -99,36 +99,17 @@ export default function SignIn(props: { disableCustomTheme?: boolean }) {
     };
 
     try {
-      const response = await post('/v1/auth/login', formData);
-      if (response.statusCode == 200) {
-        // Poi aggiorna il context
-        setOperator({
-          operator_id: response.data.operator_id,
-          user_id: response.data.user_id,
-          society_id: response.data.society_id,
-          session_id: response.data.session_id,
-          auth_token: response.data.auth_token,
-          user: {
-            user_id: response.data.user.user_id,
-            name: response.data.user.name,
-            surname: response.data.user.surname,
-            email: response.data.user.email,
-            picture: response.data.user.picture || '/profile.png',
-          },
-          society: {
-            society_id: response.data.society.society_id,
-            name: response.data.society.name,
-            email: response.data.society.email,
-            picture: response.data.society.picture || '/profile.png'
-          }
-        });
-      } else {
-        // Mostra un messaggio di errore
-        console.error(response.data.message);
-        showSnackbar(response.data.message || 'Failed to login', 'error');
-      }
+      // MOCK LOGIN
+      setOperator({
+        operator_id: 1,
+        name: 'Mario',
+        surname: 'Rossi',
+        picture: '/profile.png',
+        email: formData.email as string,
+        session_id: 'mock-session-abc123',
+        auth_token: 'mock-token-xyz789',
+      });
     } catch (error: any) {
-      // Gestione degli errori
       console.error(error.response?.data?.message || 'An error occurred');
       showSnackbar(error.response?.data?.message || 'An error occurred', 'error');
     }
