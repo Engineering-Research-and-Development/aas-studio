@@ -99,16 +99,22 @@ export default function SignIn(props: { disableCustomTheme?: boolean }) {
     };
 
     try {
-      // MOCK LOGIN
-      setOperator({
-        operator_id: 1,
-        name: 'Mario',
-        surname: 'Rossi',
-        picture: '/profile.png',
-        email: formData.email as string,
-        session_id: 'mock-session-abc123',
-        auth_token: 'mock-token-xyz789',
-      });
+      const response = await post('/v1/auth/login', formData);
+
+      if (response.statusCode === 200 && response.data) {
+        const d = response.data as any;
+        setOperator({
+          operator_id: d.operator_id,
+          name: d.name,
+          surname: d.surname,
+          picture: d.picture || '/profile.png',
+          email: d.email,
+          session_id: d.session_id,
+          auth_token: d.auth_token,
+        });
+      } else {
+        showSnackbar(response.message || 'Credenziali errate', 'error');
+      }
     } catch (error: any) {
       console.error(error.response?.data?.message || 'An error occurred');
       showSnackbar(error.response?.data?.message || 'An error occurred', 'error');

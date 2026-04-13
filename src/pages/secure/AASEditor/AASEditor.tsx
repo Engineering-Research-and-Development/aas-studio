@@ -22,7 +22,10 @@ import {
   ExpandMoreRounded,
   FileDownloadRounded,
   FormatListBulletedRounded,
+  HistoryRounded,
 } from '@mui/icons-material';
+
+import VersionHistoryDrawer from './components/VersionHistoryDrawer';
 
 import { useAASContext, validateAAS, MOCK_AAS_DB } from '@/context/AASContext';
 import { useDialogContext } from '@/context/DialogContext';
@@ -111,7 +114,7 @@ export default function AASEditor() {
   const {
     selectedModelId, setSelectedModelId,
     currentModel, currentVersion,
-    submodels, aasIdShort, setAasIdShort,
+    submodels, setSubmodels, aasIdShort, setAasIdShort,
     aasAssetId, setAasAssetId,
     aasDescription, setAasDescription,
     addSubmodel, removeSubmodel, updateElement,
@@ -124,6 +127,12 @@ export default function AASEditor() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [valResult, setValResult] = useState<ValidationResult | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // document_id to associate with the current AAS model in the backend.
+  // In a real integration this would come from the model loaded from the API.
+  // Here we use null to signal "not yet connected to the API".
+  const [versionDocumentId] = useState<number | null>(null);
 
   // Register secondary menu handlers
   useState(() => {
@@ -216,6 +225,16 @@ export default function AASEditor() {
           startIcon={<FileDownloadRounded />}
         >
           Export AASX
+        </Button>
+
+        <Button
+          variant={showHistory ? 'contained' : 'outlined'}
+          size="small"
+          startIcon={<HistoryRounded />}
+          onClick={() => setShowHistory(v => !v)}
+          sx={{ ml: 0.5 }}
+        >
+          History
         </Button>
       </Stack>
 
@@ -456,6 +475,19 @@ export default function AASEditor() {
 
       <AddSubmodelDialog open={showAddDialog} onClose={() => setShowAddDialog(false)} onAdd={addSubmodel} />
       <ValidationDialog open={!!valResult} res={valResult} onClose={() => setValResult(null)} />
+
+      <VersionHistoryDrawer
+        open={showHistory}
+        onClose={() => setShowHistory(false)}
+        documentId={versionDocumentId}
+        submodels={submodels}
+        onCheckoutContent={(content) => {
+          // content.submodels is the array saved at commit time
+          if (Array.isArray(content?.submodels)) {
+            setSubmodels(content.submodels);
+          }
+        }}
+      />
     </Box>
   );
 }
