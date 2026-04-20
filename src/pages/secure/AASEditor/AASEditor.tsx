@@ -31,7 +31,8 @@ import { useAASContext, validateAAS, MOCK_AAS_DB } from '@/context/AASContext';
 import { useDialogContext } from '@/context/DialogContext';
 import type { SubmodelTemplate, XsdValueType, ValidationResult } from '@/context/AASContext';
 
-import ValidationDialog from './dialogs/ValidationDialog';
+import ValidatorDialog from './dialogs/ValidatorDialog';
+
 import AddSubmodelDialog from './dialogs/AddSubmodelDialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -126,7 +127,7 @@ export default function AASEditor() {
   const [expandedSubmodels, setExpandedSubmodels] = useState<Set<string>>(new Set([submodels[0]?.id]));
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [valResult, setValResult] = useState<ValidationResult | null>(null);
+  const [showValidatorDialog, setShowValidatorDialog] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
   // document_id to associate with the current AAS model in the backend.
@@ -137,7 +138,7 @@ export default function AASEditor() {
   // Register secondary menu handlers
   useState(() => {
     setHandlers({
-      onValidateAAS: () => setValResult(validateAAS({ idShort: aasIdShort, assetId: aasAssetId }, submodels)),
+      onValidateAAS: () => setShowValidatorDialog(true),
       onAddSubmodel: () => setShowAddDialog(true),
       onExportAASX: () => {
         const data = JSON.stringify({ idShort: aasIdShort, assetId: aasAssetId, submodels }, null, 2);
@@ -213,7 +214,7 @@ export default function AASEditor() {
           color="success"
           size="small"
           startIcon={<CheckRounded />}
-          onClick={() => setValResult(validateAAS({ idShort: aasIdShort, assetId: aasAssetId }, submodels))}
+          onClick={() => setShowValidatorDialog(true)}
         >
           Validate
         </Button>
@@ -474,7 +475,7 @@ export default function AASEditor() {
       </Box>
 
       <AddSubmodelDialog open={showAddDialog} onClose={() => setShowAddDialog(false)} onAdd={addSubmodel} />
-      <ValidationDialog open={!!valResult} res={valResult} onClose={() => setValResult(null)} />
+      <ValidatorDialog open={showValidatorDialog} onClose={() => setShowValidatorDialog(false)} />
 
       <VersionHistoryDrawer
         open={showHistory}
