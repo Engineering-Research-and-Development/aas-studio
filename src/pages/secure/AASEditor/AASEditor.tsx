@@ -27,13 +27,12 @@ import {
 
 import VersionHistoryDrawer from './components/VersionHistoryDrawer';
 
-import { useAASContext, validateAAS, MOCK_AAS_DB } from '@/context/AASContext';
+import { useAASContext, MOCK_AAS_DB, SubmodelTemplate, XsdValueType } from '@/context/AASContext';
 import { useDialogContext } from '@/context/DialogContext';
-import type { SubmodelTemplate, XsdValueType, ValidationResult } from '@/context/AASContext';
 
-import ValidatorDialog from './dialogs/ValidatorDialog';
-
+import ValidationDialog from './dialogs/ValidationDialog';
 import AddSubmodelDialog from './dialogs/AddSubmodelDialog';
+import { buildAasEnvironment } from '@/utils/aas-builder';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type EditorView = 'list' | 'graph';
@@ -127,7 +126,8 @@ export default function AASEditor() {
   const [expandedSubmodels, setExpandedSubmodels] = useState<Set<string>>(new Set([submodels[0]?.id]));
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [showValidatorDialog, setShowValidatorDialog] = useState(false);
+  const [showValidationDialog, setShowValidationDialog] = useState(false);
+  const [initialValidationData, setInitialValidationData] = useState<any>(null);
   const [showHistory, setShowHistory] = useState(false);
 
   // document_id to associate with the current AAS model in the backend.
@@ -135,13 +135,23 @@ export default function AASEditor() {
   // Here we use null to signal "not yet connected to the API".
   const [versionDocumentId] = useState<number | null>(null);
 
+  const handleOpenValidation = () => {
+    const env = buildAasEnvironment(aasIdShort, aasAssetId, aasDescription, currentModel.assetKind, submodels);
+    setInitialValidationData(env);
+    setShowValidationDialog(true);
+  };
+
   // Register secondary menu handlers
   useState(() => {
     setHandlers({
-      onValidateAAS: () => setShowValidatorDialog(true),
+      onValidateAAS: () => {
+        setInitialValidationData(null);
+        setShowValidationDialog(true);
+      },
       onAddSubmodel: () => setShowAddDialog(true),
       onExportAASX: () => {
-        const data = JSON.stringify({ idShort: aasIdShort, assetId: aasAssetId, submodels }, null, 2);
+        const env = buildAasEnvironment(aasIdShort, aasAssetId, aasDescription, currentModel.assetKind, submodels);
+        const data = JSON.stringify(env, null, 2);
         const blob = new Blob([data], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -214,7 +224,7 @@ export default function AASEditor() {
           color="success"
           size="small"
           startIcon={<CheckRounded />}
-          onClick={() => setShowValidatorDialog(true)}
+          onClick={handleOpenValidation}
         >
           Validate
         </Button>
@@ -475,7 +485,7 @@ export default function AASEditor() {
       </Box>
 
       <AddSubmodelDialog open={showAddDialog} onClose={() => setShowAddDialog(false)} onAdd={addSubmodel} />
-      <ValidatorDialog open={showValidatorDialog} onClose={() => setShowValidatorDialog(false)} />
+      <ValidationDialog open={showValidationDialog} onClose={() => { setShowValidationDialog(false); setInitialValidationData(null); }} initialValidationData={initialValidationData} />
 
       <VersionHistoryDrawer
         open={showHistory}

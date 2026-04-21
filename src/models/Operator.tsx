@@ -1,4 +1,4 @@
-interface Operator {
+export default interface Operator {
   operator_id: number;
   name: string;
   surname: string;
@@ -11,5 +11,3 @@ interface Operator {
   createdAt?: string;
   updatedAt?: string;
 }
-
-export default Operator;
