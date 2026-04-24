@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Alert,
   Box,
@@ -36,7 +36,8 @@ import { parseAasXml } from '@/utils/aas-xml-utils';
 interface ValidationDialogProps {
   open: boolean;
   onClose: () => void;
-  initialValidationData?: any;
+  initialValidationData?: Record<string, unknown> | null;
+  onImport?: (data: Record<string, unknown>) => void;
 }
 
 type ValidationResultData = {
@@ -50,7 +51,7 @@ type ValidationResultData = {
   }>;
 };
 
-export default function ValidationDialog({ open, onClose, initialValidationData }: ValidationDialogProps) {
+export default function ValidationDialog({ open, onClose, initialValidationData, onImport }: ValidationDialogProps) {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -58,15 +59,7 @@ export default function ValidationDialog({ open, onClose, initialValidationData 
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<ValidationResultData | null>(null);
-
-  // If initialValidationData is provided when opened, validate it immediately
-  useEffect(() => {
-    if (open && initialValidationData) {
-      validateObject(initialValidationData);
-    } else if (!open) {
-      resetDialog();
-    }
-  }, [open, initialValidationData]);
+  const [parsedData, setParsedData] = useState<Record<string, unknown> | null>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -99,13 +92,15 @@ export default function ValidationDialog({ open, onClose, initialValidationData 
     if (validExtensions.includes(extension)) {
       setFile(selectedFile);
       setResult(null);
+      setParsedData(null);
     } else {
       alert('File type non supportato. Usa .aasx, .json o .xml');
     }
   };
 
-  const executeValidation = (parsedJson: any): ValidationResultData => {
-    const envResult = AasJsonization.environmentFromJsonable(parsedJson);
+  const executeValidation = useCallback((parsedJson: Record<string, unknown>): ValidationResultData => {
+    setParsedData(parsedJson);
+    const envResult = AasJsonization.environmentFromJsonable(parsedJson as any);
 
     if (envResult.error !== null) {
       return {
@@ -162,16 +157,16 @@ export default function ValidationDialog({ open, onClose, initialValidationData 
         message: data.message
       }))
     };
-  };
+  }, []);
 
-  const validateObject = async (obj: any) => {
+  const validateObject = useCallback(async (obj: Record<string, unknown>) => {
     setIsLoading(true);
     setResult(null);
     setTimeout(() => {
       try {
         const validationResult = executeValidation(obj);
         setResult(validationResult);
-      } catch (e: any) {
+      } catch (e: unknown) {
         setResult({
           status: 'error',
           compliant: false,
@@ -179,20 +174,20 @@ export default function ValidationDialog({ open, onClose, initialValidationData 
             constraint: "JSON Format Error",
             occurrences: 1,
             locations: ["Internal Object"],
-            message: e.message
+            message: e instanceof Error ? e.message : String(e)
           }]
         });
       } finally {
         setIsLoading(false);
       }
     }, 300);
-  };
+  }, []);
 
   const handleRawContent = async (content: string, isXml = false): Promise<ValidationResultData> => {
     try {
       const parsed = isXml ? parseAasXml(content) : JSON.parse(content);
       return executeValidation(parsed);
-    } catch (e: any) {
+    } catch (e: unknown) {
       return {
         status: 'error',
         compliant: false,
@@ -200,7 +195,7 @@ export default function ValidationDialog({ open, onClose, initialValidationData 
           constraint: isXml ? "XML Format Error" : "JSON Format Error",
           occurrences: 1,
           locations: ["File Structure"],
-          message: e.message
+          message: e instanceof Error ? e.message : String(e)
         }]
       };
     }
@@ -250,12 +245,12 @@ export default function ValidationDialog({ open, onClose, initialValidationData 
         throw new Error("Unsupported file type.");
       }
       setResult(validationResult);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Validation error:", error);
       setResult({
         status: 'error',
         compliant: false,
-        errors: [{ constraint: "Internal Error", occurrences: 1, locations: ["System"], message: error.message }]
+        errors: [{ constraint: "Internal Error", occurrences: 1, locations: ["System"], message: error instanceof Error ? error.message : String(error) }]
       });
     } finally {
       setIsLoading(false);
@@ -265,11 +260,28 @@ export default function ValidationDialog({ open, onClose, initialValidationData 
   const resetDialog = () => {
     setFile(null);
     setResult(null);
+    setParsedData(null);
   };
+
+  // If initialValidationData is provided when opened, validate it immediately
+  useEffect(() => {
+    if (open && initialValidationData) {
+      validateObject(initialValidationData);
+    } else if (!open) {
+      resetDialog();
+    }
+  }, [open, initialValidationData, validateObject]);
 
   // If initialValidationData was provided, we don't show the file upload UI
   // because we are validating the in-memory state.
   const isInMemoryValidation = !!initialValidationData;
+
+  const handleImport = () => {
+    if (onImport && parsedData) {
+      onImport(parsedData);
+      onClose();
+    }
+  };
 
   return (
     <Dialog
@@ -453,10 +465,19 @@ export default function ValidationDialog({ open, onClose, initialValidationData 
 
       <DialogActions>
         <Button onClick={onClose}>Chiudi</Button>
+        {!isInMemoryValidation && result && (
+          <Button 
+            variant="contained" 
+            color="success" 
+            onClick={handleImport}
+          >
+            Import to Editor
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );
 }
 
 // Quick component for list to avoid importing @mui/material/List above
-const List = ({ children, sx }: any) => <Box sx={sx}>{children}</Box>;
+const List = ({ children, sx }: { children: React.ReactNode; sx?: object }) => <Box sx={sx}>{children}</Box>;

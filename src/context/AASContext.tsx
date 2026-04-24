@@ -54,6 +54,8 @@ export interface AASModel {
   description: string;
   assetKind: AssetKind;
   versions: AASVersion[];
+  submodels: SubmodelTemplate[];
+  isImported?: boolean;
 }
 
 export interface SubmodelElementChild {
@@ -96,135 +98,6 @@ export interface ValidationResult {
   infos: ValidationFinding[];
   valid: boolean;
 }
-
-// ═══════════════════════════════════
-// MOCK DATABASE
-// ═══════════════════════════════════
-
-export const MOCK_AAS_DB: AASModel[] = [
-  {
-    id: 'aas-pump-001',
-    idShort: 'AAS_CentrifugalPump_CP200',
-    assetId: 'urn:mfr:siemens:pump:cp200:sn-44821',
-    description: 'Digital twin — Centrifugal Pump CP200 Line',
-    assetKind: 'Instance',
-    versions: [
-      {
-        version: '3.0.0', revision: 'A', date: '2026-03-10T14:22:00Z', status: 'Draft',
-        author: 'M. Pistone',
-        changes: 'Aggiunto submodel PredictiveMaintenance con semanticId ECLASS',
-        details: [
-          { type: 'added', target: 'Submodel', name: 'PredictiveMaintenance', desc: 'Nuovo submodel manutenzione predittiva con HealthIndex e RUL' },
-          { type: 'added', target: 'Property', name: 'PredictiveMaintenance.HealthIndex', desc: 'Indice salute asset (0-100)' },
-          { type: 'added', target: 'Property', name: 'PredictiveMaintenance.RemainingUsefulLife', desc: 'Vita utile residua in ore' },
-          { type: 'added', target: 'Collection', name: 'PredictiveMaintenance.MaintenanceSchedule', desc: 'Scheduling manutenzione' },
-        ],
-      },
-      {
-        version: '2.1.0', revision: 'B', date: '2026-02-18T09:15:00Z', status: 'Active',
-        author: 'M. Pistone',
-        changes: 'Aggiornato Nameplate con nuovi campi IEC 61360',
-        details: [
-          { type: 'modified', target: 'Property', name: 'Nameplate.SerialNumber', desc: 'Aggiunto semanticId ECLASS 0173-1#02-AAM556#002' },
-          { type: 'added', target: 'Property', name: 'Nameplate.BatchNumber', desc: 'Numero lotto produzione' },
-          { type: 'modified', target: 'Submodel', name: 'Nameplate', desc: 'Aggiornato semanticId a versione 2.0 IDTA' },
-        ],
-      },
-      {
-        version: '2.0.0', revision: 'A', date: '2026-01-05T11:30:00Z', status: 'Active',
-        author: 'M. Pistone',
-        changes: 'Ristrutturato Documentation submodel, aggiunto TechnicalData',
-        details: [
-          { type: 'added', target: 'Submodel', name: 'TechnicalData', desc: 'Nuovo submodel proprietà tecniche IEC 61360' },
-          { type: 'modified', target: 'Submodel', name: 'HandoverDocumentation', desc: 'Ristrutturato con DocumentationCollection' },
-          { type: 'removed', target: 'Property', name: 'Documentation.LegacyField', desc: 'Rimosso campo legacy non conforme' },
-        ],
-      },
-      {
-        version: '1.0.0', revision: 'C', date: '2025-10-20T16:45:00Z', status: 'Deprecated',
-        author: 'M. Pistone',
-        changes: 'Release iniziale con Nameplate e Identification',
-        details: [
-          { type: 'added', target: 'Submodel', name: 'Nameplate', desc: 'Nameplate produttore IEC 61406' },
-          { type: 'added', target: 'Submodel', name: 'Identification', desc: 'Identificazione asset ECLASS' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'aas-robot-002',
-    idShort: 'AAS_IndustrialRobot_KR60',
-    assetId: 'urn:mfr:kuka:robot:kr60:sn-88412',
-    description: 'Digital twin — KUKA KR 60 HA',
-    assetKind: 'Instance',
-    versions: [
-      {
-        version: '1.2.0', revision: 'A', date: '2026-03-01T10:00:00Z', status: 'Active',
-        author: 'L. Ferrara',
-        changes: 'Aggiunto OperationalData submodel',
-        details: [
-          { type: 'added', target: 'Submodel', name: 'OperationalData', desc: 'Dati operativi real-time' },
-          { type: 'added', target: 'Property', name: 'OperationalData.OperatingHours', desc: 'Ore di funzionamento' },
-        ],
-      },
-      {
-        version: '1.0.0', revision: 'A', date: '2025-11-01T12:00:00Z', status: 'Deprecated',
-        author: 'L. Ferrara',
-        changes: 'Prima versione',
-        details: [
-          { type: 'added', target: 'Submodel', name: 'Nameplate', desc: 'Nameplate KUKA' },
-          { type: 'added', target: 'Submodel', name: 'Identification', desc: 'Identificazione robot' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'aas-sensor-003',
-    idShort: 'AAS_TempSensor_TS400',
-    assetId: 'urn:mfr:bosch:sensor:ts400:sn-12093',
-    description: 'Digital twin — Bosch TS400 Temperature Sensor',
-    assetKind: 'Instance',
-    versions: [
-      {
-        version: '2.0.0', revision: 'A', date: '2026-02-28T15:20:00Z', status: 'Active',
-        author: 'M. Pistone',
-        changes: 'Migrazione a AAS v3 metamodel',
-        details: [
-          { type: 'modified', target: 'Submodel', name: 'Nameplate', desc: 'Migrato a schema AAS v3' },
-          { type: 'modified', target: 'Submodel', name: 'TechnicalData', desc: 'Allineato a IDTA template v1.2' },
-        ],
-      },
-      {
-        version: '1.0.0', revision: 'B', date: '2025-09-10T09:00:00Z', status: 'Deprecated',
-        author: 'M. Pistone',
-        changes: 'Release iniziale',
-        details: [
-          { type: 'added', target: 'Submodel', name: 'Nameplate', desc: 'Nameplate Bosch' },
-          { type: 'added', target: 'Submodel', name: 'TechnicalData', desc: 'Dati tecnici sensore' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'aas-conveyor-004',
-    idShort: 'AAS_ConveyorBelt_CB100',
-    assetId: 'urn:mfr:festo:conveyor:cb100:sn-55110',
-    description: 'Digital twin — Festo CB100 Conveyor Belt',
-    assetKind: 'Type',
-    versions: [
-      {
-        version: '1.0.0', revision: 'A', date: '2026-03-05T11:10:00Z', status: 'Draft',
-        author: 'A. Rossi',
-        changes: 'Modello type iniziale',
-        details: [
-          { type: 'added', target: 'Submodel', name: 'Nameplate', desc: 'Nameplate Festo' },
-          { type: 'added', target: 'Submodel', name: 'TechnicalData', desc: 'Specifiche tecniche nastro' },
-          { type: 'added', target: 'Submodel', name: 'BillOfMaterial', desc: 'BOM componenti nastro' },
-        ],
-      },
-    ],
-  },
-];
 
 // ═══════════════════════════════════
 // SUBMODEL CATALOG
@@ -340,6 +213,104 @@ export const SM_CATALOG: SubmodelTemplate[] = [
 ];
 
 // ═══════════════════════════════════
+// MOCK DATABASE
+// ═══════════════════════════════════
+
+export const MOCK_AAS_DB: AASModel[] = [
+  {
+    id: 'aas-pump-001',
+    idShort: 'AAS_CentrifugalPump_CP200',
+    assetId: 'urn:mfr:siemens:pump:cp200:sn-44821',
+    description: 'Digital twin — Centrifugal Pump CP200 Line',
+    assetKind: 'Instance',
+    versions: [
+      {
+        version: '3.0.0', revision: 'A', date: '2026-03-10T14:22:00Z', status: 'Draft',
+        author: 'M. Pistone',
+        changes: 'Aggiunto submodel PredictiveMaintenance con semanticId ECLASS',
+        details: [
+          { type: 'added', target: 'Submodel', name: 'PredictiveMaintenance', desc: 'Nuovo submodel manutenzione predittiva con HealthIndex e RUL' },
+          { type: 'added', target: 'Property', name: 'PredictiveMaintenance.HealthIndex', desc: 'Indice salute asset (0-100)' },
+          { type: 'added', target: 'Property', name: 'PredictiveMaintenance.RemainingUsefulLife', desc: 'Vita utile residua in ore' },
+          { type: 'added', target: 'Collection', name: 'PredictiveMaintenance.MaintenanceSchedule', desc: 'Scheduling manutenzione' },
+        ],
+      },
+    ],
+    submodels: [
+      { ...SM_CATALOG[0], elements: SM_CATALOG[0].elements.map(e => ({ ...e, value: '' })) },
+      { ...SM_CATALOG[2], elements: SM_CATALOG[2].elements.map(e => ({ ...e, value: '' })) },
+    ],
+  },
+  {
+    id: 'aas-robot-002',
+    idShort: 'AAS_IndustrialRobot_KR60',
+    assetId: 'urn:mfr:kuka:robot:kr60:sn-88412',
+    description: 'Digital twin — KUKA KR 60 HA',
+    assetKind: 'Instance',
+    versions: [
+      {
+        version: '1.2.0', revision: 'A', date: '2026-03-01T10:00:00Z', status: 'Active',
+        author: 'L. Ferrara',
+        changes: 'Aggiunto OperationalData submodel',
+        details: [
+          { type: 'added', target: 'Submodel', name: 'OperationalData', desc: 'Dati operativi real-time' },
+          { type: 'added', target: 'Property', name: 'OperationalData.OperatingHours', desc: 'Ore di funzionamento' },
+        ],
+      },
+    ],
+    submodels: [
+      { ...SM_CATALOG[0], elements: SM_CATALOG[0].elements.map(e => ({ ...e, value: '' })) },
+      { ...SM_CATALOG[4], elements: SM_CATALOG[4].elements.map(e => ({ ...e, value: '' })) },
+    ],
+  },
+  {
+    id: 'aas-sensor-003',
+    idShort: 'AAS_TempSensor_TS400',
+    assetId: 'urn:mfr:bosch:sensor:ts400:sn-12093',
+    description: 'Digital twin — Bosch TS400 Temperature Sensor',
+    assetKind: 'Instance',
+    versions: [
+      {
+        version: '2.0.0', revision: 'A', date: '2026-02-28T15:20:00Z', status: 'Active',
+        author: 'M. Pistone',
+        changes: 'Migrazione a AAS v3 metamodel',
+        details: [
+          { type: 'modified', target: 'Submodel', name: 'Nameplate', desc: 'Migrato a schema AAS v3' },
+          { type: 'modified', target: 'Submodel', name: 'TechnicalData', desc: 'Allineato a IDTA template v1.2' },
+        ],
+      },
+    ],
+    submodels: [
+      { ...SM_CATALOG[0], elements: SM_CATALOG[0].elements.map(e => ({ ...e, value: '' })) },
+      { ...SM_CATALOG[2], elements: SM_CATALOG[2].elements.map(e => ({ ...e, value: '' })) },
+    ],
+  },
+  {
+    id: 'aas-conveyor-004',
+    idShort: 'AAS_ConveyorBelt_CB100',
+    assetId: 'urn:mfr:festo:conveyor:cb100:sn-55110',
+    description: 'Digital twin — Festo CB100 Conveyor Belt',
+    assetKind: 'Type',
+    versions: [
+      {
+        version: '1.0.0', revision: 'A', date: '2026-03-05T11:10:00Z', status: 'Draft',
+        author: 'A. Rossi',
+        changes: 'Modello type iniziale',
+        details: [
+          { type: 'added', target: 'Submodel', name: 'Nameplate', desc: 'Nameplate Festo' },
+          { type: 'added', target: 'Submodel', name: 'TechnicalData', desc: 'Specifiche tecniche nastro' },
+          { type: 'added', target: 'Submodel', name: 'BillOfMaterial', desc: 'BOM componenti nastro' },
+        ],
+      },
+    ],
+    submodels: [
+      { ...SM_CATALOG[0], elements: SM_CATALOG[0].elements.map(e => ({ ...e, value: '' })) },
+      { ...SM_CATALOG[7], elements: SM_CATALOG[7].elements.map(e => ({ ...e, value: '' })) },
+    ],
+  },
+];
+
+// ═══════════════════════════════════
 // VALIDATION ENGINE
 // ═══════════════════════════════════
 
@@ -347,120 +318,150 @@ export function validateAAS(
   aas: { idShort: string; assetId: string },
   sms: SubmodelTemplate[]
 ): ValidationResult {
-  const E: ValidationFinding[] = [];
-  const W: ValidationFinding[] = [];
-  const N: ValidationFinding[] = [];
+  const errors: ValidationFinding[] = [];
+  const warnings: ValidationFinding[] = [];
+  const infos: ValidationFinding[] = [];
 
-  if (!aas.idShort?.trim()) E.push({ path: 'AAS', msg: 'idShort obbligatorio', rule: 'AAS-001' });
-  if (aas.idShort && !/^[a-zA-Z_]\w*$/.test(aas.idShort))
-    E.push({ path: 'AAS.idShort', msg: `"${aas.idShort}" non valido`, rule: 'AAS-002' });
-  if (!aas.assetId?.trim()) E.push({ path: 'AAS.assetId', msg: 'globalAssetId obbligatorio', rule: 'AAS-003' });
-  if (aas.assetId && !aas.assetId.startsWith('urn:'))
-    W.push({ path: 'AAS.assetId', msg: 'Formato URN raccomandato', rule: 'W001' });
-  if (!sms.length) W.push({ path: 'AAS', msg: 'Nessun submodel', rule: 'W002' });
+  const addFinding = (collection: ValidationFinding[], path: string, msg: string, rule: string) => {
+    collection.push({ path, msg, rule });
+  };
+
+  const validateIdShort = (idShort: string | undefined, path: string, emptyRule: string, formatRule: string) => {
+    if (!idShort?.trim()) {
+      addFinding(errors, path, 'idShort obbligatorio', emptyRule);
+    } else if (!/^[a-zA-Z_]\w*$/.test(idShort)) {
+      addFinding(errors, path, `"${idShort}" non valido`, formatRule);
+    }
+  };
+
+  validateIdShort(aas.idShort, 'AAS', 'AAS-001', 'AAS-002');
+
+  if (!aas.assetId?.trim()) addFinding(errors, 'AAS.assetId', 'globalAssetId obbligatorio', 'AAS-003');
+  else if (!aas.assetId.startsWith('urn:')) addFinding(warnings, 'AAS.assetId', 'Formato URN raccomandato', 'W001');
+
+  if (!sms.length) addFinding(warnings, 'AAS', 'Nessun submodel', 'W002');
 
   const sIds = new Set<string>();
   sms.forEach((s, i) => {
     const p = `SM[${i}] "${s.idShort || '?'}"`;
-    if (!s.idShort?.trim()) E.push({ path: p, msg: 'idShort obbligatorio', rule: 'SM-001' });
-    if (s.idShort && !/^[a-zA-Z_]\w*$/.test(s.idShort))
-      E.push({ path: p, msg: 'idShort non valido', rule: 'SM-002' });
-    if (sIds.has(s.idShort)) E.push({ path: p, msg: `"${s.idShort}" duplicato`, rule: 'SM-003' });
-    sIds.add(s.idShort);
-    if (!s.semanticId?.trim()) W.push({ path: p, msg: 'semanticId mancante', rule: 'SW001' });
-    if (!s.elements?.length) N.push({ path: p, msg: 'Submodel vuoto', rule: 'SI001' });
+    validateIdShort(s.idShort, p, 'SM-001', 'SM-002');
+
+    if (s.idShort && sIds.has(s.idShort)) addFinding(errors, p, `"${s.idShort}" duplicato`, 'SM-003');
+    if (s.idShort) sIds.add(s.idShort);
+
+    if (!s.semanticId?.trim()) addFinding(warnings, p, 'semanticId mancante', 'SW001');
+    if (!s.elements?.length) addFinding(infos, p, 'Submodel vuoto', 'SI001');
 
     const eIds = new Set<string>();
     (s.elements || []).forEach((el, ei) => {
       const ep = `${p} → ${el.idShort || `[${ei}]`}`;
-      if (!el.idShort?.trim()) E.push({ path: ep, msg: 'idShort obbligatorio', rule: 'EL-001' });
-      if (el.idShort && !/^[a-zA-Z_]\w*$/.test(el.idShort))
-        E.push({ path: ep, msg: 'idShort non valido', rule: 'EL-002' });
-      if (eIds.has(el.idShort)) E.push({ path: ep, msg: `"${el.idShort}" duplicato`, rule: 'EL-003' });
-      eIds.add(el.idShort);
+      validateIdShort(el.idShort, ep, 'EL-001', 'EL-002');
+
+      if (el.idShort && eIds.has(el.idShort)) addFinding(errors, ep, `"${el.idShort}" duplicato`, 'EL-003');
+      if (el.idShort) eIds.add(el.idShort);
+
       if (el.type === 'Property') {
-        if (!el.valueType) E.push({ path: ep, msg: 'valueType obbligatorio', rule: 'EL-004' });
+        if (!el.valueType) addFinding(errors, ep, 'valueType obbligatorio', 'EL-004');
         const v = typeof el.value === 'string' ? el.value : '';
         if (v) {
-          if (el.valueType === 'xs:int' && isNaN(parseInt(v)))
-            E.push({ path: ep, msg: `"${v}" non intero`, rule: 'EL-005' });
-          if ((el.valueType === 'xs:double' || el.valueType === 'xs:float') && isNaN(parseFloat(v)))
-            E.push({ path: ep, msg: `"${v}" non numero`, rule: 'EL-006' });
-          if (el.valueType === 'xs:boolean' && !['true', 'false', '0', '1'].includes(v.toLowerCase()))
-            E.push({ path: ep, msg: `"${v}" non booleano`, rule: 'EL-007' });
+          if (el.valueType === 'xs:int' && isNaN(parseInt(v))) addFinding(errors, ep, `"${v}" non intero`, 'EL-005');
+          if ((el.valueType === 'xs:double' || el.valueType === 'xs:float') && isNaN(parseFloat(v))) addFinding(errors, ep, `"${v}" non numero`, 'EL-006');
+          if (el.valueType === 'xs:boolean' && !['true', 'false', '0', '1'].includes(v.toLowerCase())) addFinding(errors, ep, `"${v}" non booleano`, 'EL-007');
         }
       }
-      if (!el.semanticId) N.push({ path: ep, msg: 'semanticId mancante', rule: 'EI001' });
-      if (el.required && (el.value === undefined || el.value === ''))
-        E.push({ path: ep, msg: 'Campo required vuoto', rule: 'EL-008' });
+      if (!el.semanticId) addFinding(infos, ep, 'semanticId mancante', 'EI001');
+      if (el.required && (el.value === undefined || el.value === '')) addFinding(errors, ep, 'Campo required vuoto', 'EL-008');
     });
   });
 
-  return { errors: E, warnings: W, infos: N, valid: E.length === 0 };
+  return { errors, warnings, infos, valid: errors.length === 0 };
 }
 
 // ═══════════════════════════════════
 // CONTEXT
 // ═══════════════════════════════════
 
-const DEFAULT_SUBMODELS: SubmodelTemplate[] = [
-  { ...SM_CATALOG[0], elements: SM_CATALOG[0].elements.map(e => ({ ...e, value: e.type === 'MultiLanguageProperty' ? {} : '' })) },
-  { ...SM_CATALOG[2], elements: SM_CATALOG[2].elements.map(e => ({ ...e, value: e.type === 'MultiLanguageProperty' ? {} : '' })) },
-];
-
 interface AASContextType {
   selectedModelId: string;
   setSelectedModelId: (id: string) => void;
+  availableModels: AASModel[];
   currentModel: AASModel;
   currentVersion: AASVersion;
-  submodels: SubmodelTemplate[];
-  setSubmodels: React.Dispatch<React.SetStateAction<SubmodelTemplate[]>>;
-  aasIdShort: string;
-  setAasIdShort: (v: string) => void;
-  aasAssetId: string;
-  setAasAssetId: (v: string) => void;
-  aasDescription: string;
-  setAasDescription: (v: string) => void;
+  updateCurrentModel: (patch: Partial<AASModel>) => void;
   addSubmodel: (sm: SubmodelTemplate) => void;
   removeSubmodel: (id: string) => void;
   updateElement: (smId: string, elIdx: number, field: string, value: string) => void;
+  importAas: (model: AASModel) => void;
+  setSubmodels: (sms: SubmodelTemplate[]) => void; // Added back for VersionHistory compatibility
 }
 
 const AASContext = createContext<AASContextType | null>(null);
 
 export function AASProvider({ children }: { children: ReactNode }) {
-  const [selectedModelId, setSelectedModelId] = useState(MOCK_AAS_DB[0].id);
-  const currentModel = MOCK_AAS_DB.find(m => m.id === selectedModelId) || MOCK_AAS_DB[0];
-  const currentVersion = currentModel.versions[0];
+  const [availableModels, setAvailableModels] = useState<AASModel[]>(() => {
+    const saved = localStorage.getItem('aas_studio_models');
+    return saved ? JSON.parse(saved) : MOCK_AAS_DB;
+  });
+  
+  const [selectedModelId, setSelectedModelId] = useState(availableModels[0]?.id || '');
 
-  const [submodels, setSubmodels] = useState<SubmodelTemplate[]>(DEFAULT_SUBMODELS);
-  const [aasIdShort, setAasIdShort] = useState(currentModel.idShort);
-  const [aasAssetId, setAasAssetId] = useState(currentModel.assetId);
-  const [aasDescription, setAasDescription] = useState(currentModel.description);
-
+  // Persistence to localStorage
   useEffect(() => {
-    setAasIdShort(currentModel.idShort);
-    setAasAssetId(currentModel.assetId);
-    setAasDescription(currentModel.description);
+    localStorage.setItem('aas_studio_models', JSON.stringify(availableModels));
+  }, [availableModels]);
+
+  const currentModel = availableModels.find(m => m.id === selectedModelId) || availableModels[0];
+  
+  const currentVersion = currentModel?.versions[0] || {
+    version: '1.0.0', revision: 'A', date: new Date().toISOString(), status: 'Draft',
+    author: 'System', changes: 'Model state', details: []
+  };
+
+  const updateCurrentModel = useCallback((patch: Partial<AASModel>) => {
+    setAvailableModels(prev => prev.map(m => 
+      m.id === selectedModelId ? { ...m, ...patch } : m
+    ));
   }, [selectedModelId]);
 
+  const setSubmodels = useCallback((sms: SubmodelTemplate[]) => {
+    updateCurrentModel({ submodels: sms });
+  }, [updateCurrentModel]);
+
   const addSubmodel = useCallback((sm: SubmodelTemplate) => {
-    setSubmodels(prev => [...prev, sm]);
-  }, []);
+    setAvailableModels(prev => prev.map(m => 
+      m.id === selectedModelId ? { ...m, submodels: [...m.submodels, sm] } : m
+    ));
+  }, [selectedModelId]);
 
   const removeSubmodel = useCallback((id: string) => {
-    setSubmodels(prev => prev.filter(s => s.id !== id));
-  }, []);
+    setAvailableModels(prev => prev.map(m => 
+      m.id === selectedModelId ? { ...m, submodels: m.submodels.filter(s => s.id !== id) } : m
+    ));
+  }, [selectedModelId]);
 
   const updateElement = useCallback((smId: string, elIdx: number, field: string, value: string) => {
-    setSubmodels(prev =>
-      prev.map(s => {
-        if (s.id !== smId) return s;
-        const elements = [...s.elements];
-        elements[elIdx] = { ...elements[elIdx], [field]: value };
-        return { ...s, elements };
-      })
-    );
+    setAvailableModels(prev => prev.map(m => {
+      if (m.id !== selectedModelId) return m;
+      return {
+        ...m,
+        submodels: m.submodels.map(s => {
+          if (s.id !== smId) return s;
+          const elements = [...s.elements];
+          elements[elIdx] = { ...elements[elIdx], [field]: value };
+          return { ...s, elements };
+        })
+      };
+    }));
+  }, [selectedModelId]);
+
+  const importAas = useCallback((model: AASModel) => {
+    const imported = { ...model, isImported: true };
+    setAvailableModels(prev => {
+      const exists = prev.find(m => m.id === imported.id);
+      if (exists) return prev.map(m => m.id === imported.id ? imported : m);
+      return [...prev, imported];
+    });
+    setSelectedModelId(imported.id);
   }, []);
 
   return (
@@ -468,19 +469,15 @@ export function AASProvider({ children }: { children: ReactNode }) {
       value={{
         selectedModelId,
         setSelectedModelId,
+        availableModels,
         currentModel,
         currentVersion,
-        submodels,
-        setSubmodels,
-        aasIdShort,
-        setAasIdShort,
-        aasAssetId,
-        setAasAssetId,
-        aasDescription,
-        setAasDescription,
+        updateCurrentModel,
         addSubmodel,
         removeSubmodel,
         updateElement,
+        importAas,
+        setSubmodels,
       }}
     >
       {children}

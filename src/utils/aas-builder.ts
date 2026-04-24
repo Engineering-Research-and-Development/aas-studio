@@ -1,9 +1,58 @@
 import { SubmodelTemplate, AssetKind, SubmodelElement } from '@/context/AASContext';
 
-function mapSubmodelElement(el: SubmodelElement): any {
+export interface IDTAReference {
+  type: string;
+  keys: Array<{ type: string; value: string }>;
+}
+
+export interface IDTASubmodelElement {
+  idShort: string;
+  modelType: string;
+  semanticId?: IDTAReference;
+  valueType?: string;
+  value?: string | unknown[] | IDTAReference;
+  contentType?: string;
+  inoutputVariables?: unknown[];
+}
+
+export interface IDTASubmodel {
+  modelType: 'Submodel';
+  id: string;
+  idShort: string;
+  semanticId?: IDTAReference;
+  description?: Array<{ language: string; text: string }>;
+  submodelElements: IDTASubmodelElement[];
+}
+
+export interface IDTAShell {
+  modelType: 'AssetAdministrationShell';
+  id: string;
+  idShort: string;
+  description?: Array<{ language: string; text: string }>;
+  assetInformation: {
+    assetKind: AssetKind;
+    globalAssetId: string;
+  };
+  submodels: IDTAReference[];
+}
+
+export interface IDTAEnvironment {
+  assetAdministrationShells: IDTAShell[];
+  submodels: IDTASubmodel[];
+  conceptDescriptions: unknown[];
+}
+
+function buildReference(value: string): IDTAReference {
+  return {
+    type: 'ExternalReference',
+    keys: [{ type: 'GlobalReference', value }],
+  };
+}
+
+function mapSubmodelElement(el: SubmodelElement): IDTASubmodelElement {
   const base = {
     idShort: el.idShort,
-    semanticId: el.semanticId ? { type: 'ExternalReference', keys: [{ type: 'GlobalReference', value: el.semanticId }] } : undefined,
+    semanticId: el.semanticId ? buildReference(el.semanticId) : undefined,
   };
 
   switch (el.type) {
@@ -18,13 +67,13 @@ function mapSubmodelElement(el: SubmodelElement): any {
       return {
         ...base,
         modelType: 'MultiLanguageProperty',
-        value: [], // Placeholder
+        value: [],
       };
     case 'SubmodelElementCollection':
       return {
         ...base,
         modelType: 'SubmodelElementCollection',
-        value: (el.children || []).map(child => mapSubmodelElement(child as unknown as SubmodelElement)),
+        value: (el.children || []).map((child) => mapSubmodelElement(child as SubmodelElement)),
       };
     case 'File':
       return {
@@ -43,7 +92,7 @@ function mapSubmodelElement(el: SubmodelElement): any {
       return {
         ...base,
         modelType: 'ReferenceElement',
-        value: { type: 'ExternalReference', keys: [] }
+        value: { type: 'ExternalReference', keys: [] },
       };
     default:
       return {
@@ -59,39 +108,37 @@ export function buildAasEnvironment(
   aasDescription: string,
   assetKind: AssetKind,
   submodels: SubmodelTemplate[]
-): any {
-  // 1. Map Submodels
-  const mappedSubmodels = submodels.map((sm) => {
+): IDTAEnvironment {
+  const mappedSubmodels: IDTASubmodel[] = submodels.map((sm) => {
+    const isStandardId = sm.id.startsWith('urn:') || sm.id.startsWith('https:');
     return {
       modelType: 'Submodel',
-      id: sm.id.startsWith('urn:') || sm.id.startsWith('https:') ? sm.id : `https://aas-studio.local/submodels/${sm.id}`,
+      id: isStandardId ? sm.id : `https://aas-studio.local/submodels/${sm.id}`,
       idShort: sm.idShort,
-      semanticId: sm.semanticId ? { type: 'ExternalReference', keys: [{ type: 'GlobalReference', value: sm.semanticId }] } : undefined,
+      semanticId: sm.semanticId ? buildReference(sm.semanticId) : undefined,
       description: sm.description ? [{ language: 'en', text: sm.description }] : undefined,
-      submodelElements: (sm.elements || []).map(mapSubmodelElement).filter(Boolean)
+      submodelElements: (sm.elements || []).map(mapSubmodelElement).filter(Boolean) as IDTASubmodelElement[],
     };
   });
 
-  // 2. Map AAS Shell
-  const shell = {
+  const shell: IDTAShell = {
     modelType: 'AssetAdministrationShell',
     id: `https://aas-studio.local/shells/${aasIdShort || 'default'}`,
     idShort: aasIdShort,
     description: aasDescription ? [{ language: 'en', text: aasDescription }] : undefined,
     assetInformation: {
       assetKind: assetKind || 'Instance',
-      globalAssetId: aasAssetId || `https://aas-studio.local/assets/default`
+      globalAssetId: aasAssetId || 'https://aas-studio.local/assets/default',
     },
-    submodels: mappedSubmodels.map(sm => ({
+    submodels: mappedSubmodels.map((sm) => ({
       type: 'ModelReference',
-      keys: [{ type: 'Submodel', value: sm.id }]
-    }))
+      keys: [{ type: 'Submodel', value: sm.id }],
+    })),
   };
 
-  // 3. Assemble Environment
   return {
     assetAdministrationShells: [shell],
     submodels: mappedSubmodels,
-    conceptDescriptions: []
+    conceptDescriptions: [],
   };
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -21,13 +21,15 @@ import {
   DeleteRounded,
   ExpandMoreRounded,
   FileDownloadRounded,
+  CloudUploadRounded,
   FormatListBulletedRounded,
   HistoryRounded,
 } from '@mui/icons-material';
 
 import VersionHistoryDrawer from './components/VersionHistoryDrawer';
+import GraphView from './components/GraphView';
 
-import { useAASContext, MOCK_AAS_DB, SubmodelTemplate, XsdValueType } from '@/context/AASContext';
+import { useAASContext, XsdValueType, AASModel } from '@/context/AASContext';
 import { useDialogContext } from '@/context/DialogContext';
 
 import ValidationDialog from './dialogs/ValidationDialog';
@@ -38,87 +40,22 @@ import { buildAasEnvironment } from '@/utils/aas-builder';
 type EditorView = 'list' | 'graph';
 
 // ═══════════════════════
-// GRAPH VIEW
-// ═══════════════════════
-
-function GraphView({ aasId, sms }: { aasId: string; sms: SubmodelTemplate[] }) {
-  const W = 900;
-  const maxEl = sms.reduce((a, s) => Math.max(a, (s.elements || []).length), 0);
-  const H = Math.max(500, 120 + sms.length * 60 + maxEl * 38);
-  const cx = W / 2, cy = 50;
-  const n = sms.length;
-  const sp = Math.min(210, (W - 120) / (n || 1));
-  const sx0 = cx - (n - 1) * sp / 2;
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: '100%', minHeight: 460 }}>
-      <defs>
-        <marker id="ar" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto">
-          <polygon points="0 0,10 3.5,0 7" fill="#6366f1" opacity=".5" />
-        </marker>
-      </defs>
-      <rect x={cx - 90} y={cy - 22} width={180} height={44} rx={10} fill="#1a2040" stroke="#6366f1" strokeWidth="2" />
-      <text x={cx} y={cy - 4} textAnchor="middle" fill="#6366f1" fontSize="9" fontFamily="monospace" fontWeight="600">AAS</text>
-      <text x={cx} y={cy + 10} textAnchor="middle" fill="#e8ecf2" fontSize="11" fontFamily="sans-serif" fontWeight="600">
-        {aasId.replace('AAS_', '')}
-      </text>
-      {sms.map((sm, idx) => {
-        const x = sx0 + idx * sp, y = 160;
-        const ey0 = y + 55;
-        return (
-          <g key={sm.id}>
-            <line x1={cx} y1={cy + 22} x2={x} y2={y - 20} stroke="#6366f1" strokeWidth="1.5" opacity=".3" markerEnd="url(#ar)" />
-            <rect x={x - 75} y={y - 20} width={150} height={40} rx={8} fill="#10291a" stroke="#10b981" strokeWidth="1.5" />
-            <text x={x} y={y - 3} textAnchor="middle" fill="#10b981" fontSize="8" fontFamily="monospace" fontWeight="600">SUBMODEL</text>
-            <text x={x} y={y + 10} textAnchor="middle" fill="#e8ecf2" fontSize="10" fontFamily="sans-serif" fontWeight="600">{sm.idShort}</text>
-            {(sm.elements || []).slice(0, 9).map((el, ei) => {
-              const ey = ey0 + ei * 36;
-              const c = el.type === 'SubmodelElementCollection' ? '#f5a623' : el.type === 'Operation' ? '#50a0ff' : '#a0aec0';
-              const bg = el.type === 'SubmodelElementCollection' ? '#291f10' : el.type === 'Operation' ? '#0f1a2a' : '#151a22';
-              const abbr = el.type === 'Property' ? 'P' : el.type === 'SubmodelElementCollection' ? 'C' : el.type === 'MultiLanguageProperty' ? 'MLP' : el.type === 'File' ? 'F' : '?';
-              return (
-                <g key={ei}>
-                  <line x1={x} y1={y + 20} x2={x} y2={ey - 10} stroke={c} strokeWidth="1" opacity=".15" strokeDasharray={ei ? '3,3' : ''} />
-                  <rect x={x - 65} y={ey - 12} width={130} height={24} rx={6} fill={bg} stroke={c} strokeWidth="1" opacity=".8" />
-                  <text x={x - 53} y={ey + 2} fill={c} fontSize="7" fontFamily="monospace" opacity=".7">{abbr}</text>
-                  <text x={x - 40} y={ey + 2} fill="#e8ecf2" fontSize="9" fontFamily="sans-serif">
-                    {el.idShort.length > 13 ? el.idShort.slice(0, 13) + '…' : el.idShort}
-                  </text>
-                  {el.required && <circle cx={x + 58} cy={ey} r={3} fill="#f05252" />}
-                </g>
-              );
-            })}
-          </g>
-        );
-      })}
-      {!sms.length && (
-        <text x={cx} y={cy + 80} textAnchor="middle" fill="#3d4a5c" fontSize="12" fontFamily="sans-serif">
-          Nessun submodel
-        </text>
-      )}
-    </svg>
-  );
-}
-
-// ═══════════════════════
-// VALIDATION PANEL → ./dialogs/ValidationDialog.tsx
-// ADD SUBMODEL DIALOG → ./dialogs/AddSubmodelDialog.tsx
-// ═══════════════════════
-
-// ═══════════════════════
 // MAIN PAGE COMPONENT
 // ═══════════════════════
 
-const XSD_TYPES: XsdValueType[] = ['xs:string', 'xs:int', 'xs:double', 'xs:float', 'xs:boolean', 'xs:date', 'xs:dateTime', 'xs:anyURI', 'xs:duration'];
+const XSD_TYPES: XsdValueType[] = ['xs:string', 'xs:int', 'xs:double', 'xs:float', 'xs:boolean', 'xs:date', 'xs:dateTime', 'xs:long', 'xs:short', 'xs:byte', 'xs:anyURI', 'xs:duration', 'xs:decimal'];
 
 export default function AASEditor() {
   const {
     selectedModelId, setSelectedModelId,
+    availableModels,
     currentModel, currentVersion,
-    submodels, setSubmodels, aasIdShort, setAasIdShort,
-    aasAssetId, setAasAssetId,
-    aasDescription, setAasDescription,
+    updateCurrentModel,
     addSubmodel, removeSubmodel, updateElement,
+    importAas, setSubmodels
   } = useAASContext();
+
+  const { submodels, idShort: aasIdShort, assetId: aasAssetId, description: aasDescription } = currentModel;
 
   const { setHandlers } = useDialogContext();
 
@@ -127,47 +64,51 @@ export default function AASEditor() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [showValidationDialog, setShowValidationDialog] = useState(false);
-  const [initialValidationData, setInitialValidationData] = useState<any>(null);
+  const [initialValidationData, setInitialValidationData] = useState<Record<string, unknown> | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
-  // document_id to associate with the current AAS model in the backend.
-  // In a real integration this would come from the model loaded from the API.
-  // Here we use null to signal "not yet connected to the API".
+  // document_id signaling backend connection (placeholder)
   const [versionDocumentId] = useState<number | null>(null);
 
-  const handleOpenValidation = () => {
+  const handleOpenValidation = useCallback(() => {
     const env = buildAasEnvironment(aasIdShort, aasAssetId, aasDescription, currentModel.assetKind, submodels);
-    setInitialValidationData(env);
+    setInitialValidationData(env as unknown as Record<string, unknown>);
     setShowValidationDialog(true);
-  };
+  }, [aasIdShort, aasAssetId, aasDescription, currentModel.assetKind, submodels]);
+
+  const handleExport = useCallback(() => {
+    const env = buildAasEnvironment(aasIdShort, aasAssetId, aasDescription, currentModel.assetKind, submodels);
+    const data = JSON.stringify(env, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${aasIdShort || 'aas'}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [aasIdShort, aasAssetId, aasDescription, currentModel.assetKind, submodels]);
 
   // Register secondary menu handlers
-  useState(() => {
+  useEffect(() => {
     setHandlers({
       onValidateAAS: () => {
         setInitialValidationData(null);
         setShowValidationDialog(true);
       },
       onAddSubmodel: () => setShowAddDialog(true),
-      onExportAASX: () => {
-        const env = buildAasEnvironment(aasIdShort, aasAssetId, aasDescription, currentModel.assetKind, submodels);
-        const data = JSON.stringify(env, null, 2);
-        const blob = new Blob([data], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${aasIdShort}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-      },
+      onExportAASX: handleExport,
     });
     return () => setHandlers({});
-  });
+  }, [setHandlers, handleExport]);
 
   const toggleSubmodel = (id: string) => {
     setExpandedSubmodels(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -188,7 +129,7 @@ export default function AASEditor() {
             onChange={(e) => setSelectedModelId(e.target.value)}
             sx={{ fontFamily: 'monospace', fontSize: 11 }}
           >
-            {MOCK_AAS_DB.map(m => (
+            {availableModels.map(m => (
               <MenuItem key={m.id} value={m.id} sx={{ fontFamily: 'monospace', fontSize: 11 }}>
                 {m.idShort.replace('AAS_', '')}
               </MenuItem>
@@ -234,9 +175,22 @@ export default function AASEditor() {
           color="primary"
           size="small"
           startIcon={<FileDownloadRounded />}
+          onClick={handleExport}
         >
           Export AASX
         </Button>
+
+        {currentModel.isImported && (
+          <Button
+            variant="contained"
+            color="info"
+            size="small"
+            startIcon={<CloudUploadRounded />}
+            onClick={() => alert('Salvataggio sul server in corso... (Funzionalità API non ancora implementata)')}
+          >
+            Save to Server
+          </Button>
+        )}
 
         <Button
           variant={showHistory ? 'contained' : 'outlined'}
@@ -269,9 +223,9 @@ export default function AASEditor() {
           </Typography>
           <Stack spacing={1.5}>
             {([
-              ['idShort', aasIdShort, setAasIdShort],
-              ['globalAssetId', aasAssetId, setAasAssetId],
-              ['description', aasDescription, setAasDescription],
+              ['idShort', aasIdShort, (v: string) => updateCurrentModel({ idShort: v })],
+              ['globalAssetId', aasAssetId, (v: string) => updateCurrentModel({ assetId: v })],
+              ['description', aasDescription, (v: string) => updateCurrentModel({ description: v })],
             ] as [string, string, (v: string) => void][]).map(([label, value, setter]) => (
               <TextField
                 key={label}
@@ -309,7 +263,7 @@ export default function AASEditor() {
           </Paper>
         </Box>
 
-        {/* Right: Drop zone */}
+        {/* Right: Editor Area */}
         <Box
           sx={{
             flex: 1,
@@ -485,7 +439,42 @@ export default function AASEditor() {
       </Box>
 
       <AddSubmodelDialog open={showAddDialog} onClose={() => setShowAddDialog(false)} onAdd={addSubmodel} />
-      <ValidationDialog open={showValidationDialog} onClose={() => { setShowValidationDialog(false); setInitialValidationData(null); }} initialValidationData={initialValidationData} />
+      
+      <ValidationDialog 
+        open={showValidationDialog} 
+        onClose={() => { setShowValidationDialog(false); setInitialValidationData(null); }} 
+        initialValidationData={initialValidationData} 
+        onImport={(rawData) => {
+          const data = rawData as any;
+          const shell = data.assetAdministrationShells?.[0];
+          const importedModel: AASModel = {
+            id: shell?.id || `imported-${Date.now()}`,
+            idShort: shell?.idShort || 'Imported_AAS',
+            assetId: shell?.assetInformation?.globalAssetId || '',
+            description: shell?.description?.[0]?.text || '',
+            assetKind: shell?.assetInformation?.assetKind || 'Instance',
+            versions: [],
+            isImported: true,
+            submodels: (data.submodels || []).map((sm: any) => ({
+              id: sm.id,
+              idShort: sm.idShort,
+              semanticId: sm.semanticId?.keys?.[0]?.value || '',
+              description: sm.description?.[0]?.text || '',
+              category: 'Imported',
+              elements: (sm.submodelElements || []).map((el: any) => ({
+                idShort: el.idShort,
+                type: el.modelType,
+                value: el.value as string | undefined,
+                valueType: el.valueType,
+                semanticId: el.semanticId?.keys?.[0]?.value || '',
+                required: false
+              }))
+            }))
+          };
+          importAas(importedModel);
+          setShowValidationDialog(false);
+        }}
+      />
 
       <VersionHistoryDrawer
         open={showHistory}
@@ -493,7 +482,6 @@ export default function AASEditor() {
         documentId={versionDocumentId}
         submodels={submodels}
         onCheckoutContent={(content) => {
-          // content.submodels is the array saved at commit time
           if (Array.isArray(content?.submodels)) {
             setSubmodels(content.submodels);
           }
