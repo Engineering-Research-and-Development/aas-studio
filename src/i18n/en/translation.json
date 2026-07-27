@@ -433,6 +433,11 @@
     "add": "Add",
     "assistant": "AAS Assistant",
     "online": "online",
+    "chatStatus": {
+      "connecting": "connecting…",
+      "online": "online",
+      "offline": "offline"
+    },
     "chatPlaceholder": "Ask for help…",
     "chat": {
       "default": "Hi! I'm the AAS assistant. I can help you find the right submodel.\n\nTry:\n• \"Which submodel for maintenance?\"\n• \"What is ECLASS?\"\n• \"Submodel for carbon footprint\"",

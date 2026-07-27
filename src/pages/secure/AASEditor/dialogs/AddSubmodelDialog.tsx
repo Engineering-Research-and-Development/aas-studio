@@ -1,4 +1,4 @@
-import { useState, useEffect, type KeyboardEvent, type ChangeEvent } from 'react';
+import { useState, useEffect, useRef, type KeyboardEvent, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Avatar,
@@ -52,6 +52,7 @@ import {
   getCachedCatalog,
 } from '@/utils/idta-catalog';
 import ElementFormDialog from './ElementFormDialog';
+import { useChatbotSession, getChatbotUrl } from '@/hooks/useChatbotSession';
 
 // ── IDTA catalog: shared client in @/utils/idta-catalog ──────────────────────
 
@@ -101,8 +102,11 @@ function TemplateTree({ els, depth }: { els: SubmodelElement[]; depth: number })
 }
 
 // ── Chatbot ──────────────────────────────────────────────────────────────────
-// Responses live in the i18n catalog under addSubmodel.chat.*; this resolves
-// the message to the matching key so the component translates at render time.
+// Offline fallback only: when no chatbot backend is configured (VITE_CHATBOT_URL
+// / config.chatbotUrl) the panel answers from the i18n catalog under
+// addSubmodel.chat.*; this resolves the message to the matching key so the
+// component translates at render time. With a backend configured, the panel
+// talks to the AAS_chatbot Chainlit server via useChatbotSession instead.
 
 function getChatResponseKey(msg: string): string {
   const l = msg.toLowerCase();
@@ -154,6 +158,10 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
     { role: 'bot', text: t('addSubmodel.chat.default') },
   ]);
   const [chatInput, setChatInput] = useState('');
+  // Live assistant: with a configured backend the panel speaks the Chainlit
+  // protocol; otherwise it keeps the offline keyword mock above.
+  const chatbotUrl = getChatbotUrl();
+  const liveChat = useChatbotSession(open && chatbotUrl !== null);
 
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -321,8 +329,12 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
   const sendChat = () => {
     if (!chatInput.trim()) return;
     const msg = chatInput.trim();
-    setChatMessages(prev => [...prev, { role: 'user', text: msg }]);
     setChatInput('');
+    if (chatbotUrl) {
+      liveChat.sendMessage(msg);
+      return;
+    }
+    setChatMessages(prev => [...prev, { role: 'user', text: msg }]);
     setTimeout(
       () => setChatMessages(prev => [...prev, { role: 'bot', text: t(getChatResponseKey(msg)) }]),
       500,
@@ -333,6 +345,23 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
     text.split('**').map((part, j) =>
       j % 2 === 1 ? <strong key={j}>{part}</strong> : part,
     );
+
+  // What the assistant panel shows: live session messages (greeting prepended)
+  // or the mock conversation.
+  const displayedMessages: ChatMessage[] = chatbotUrl
+    ? [{ role: 'bot', text: t('addSubmodel.chat.default') }, ...liveChat.messages]
+    : chatMessages;
+  const chatBusy = Boolean(
+    chatbotUrl && liveChat.thinking &&
+    displayedMessages[displayedMessages.length - 1]?.role === 'user'
+  );
+
+  // Keep the latest message in view while replies stream in.
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const lastChatText = displayedMessages[displayedMessages.length - 1]?.text;
+  useEffect(() => {
+    if (chatbotUrl) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatbotUrl, displayedMessages.length, lastChatText]);
 
   return (
     <Dialog
@@ -824,14 +853,22 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
               <Typography variant="subtitle2" lineHeight={1.2}>
                 {t('addSubmodel.assistant')}
               </Typography>
-              <Typography variant="caption" color="primary.main" fontFamily="monospace">
-                {t('addSubmodel.online')}
+              <Typography
+                variant="caption"
+                fontFamily="monospace"
+                color={
+                  !chatbotUrl || liveChat.status === 'online' ? 'primary.main'
+                    : liveChat.status === 'offline' ? 'error.main'
+                    : 'text.secondary'
+                }
+              >
+                {chatbotUrl ? t(`addSubmodel.chatStatus.${liveChat.status}`) : t('addSubmodel.online')}
               </Typography>
             </Box>
           </Stack>
 
           <Box flex={1} overflow="auto" p={1.75} display="flex" flexDirection="column" gap={1}>
-            {chatMessages.map((m, i) => (
+            {displayedMessages.map((m, i) => (
               <Box
                 key={i}
                 display="flex"
@@ -854,6 +891,14 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
                 </Paper>
               </Box>
             ))}
+            {chatBusy && (
+              <Box display="flex" justifyContent="flex-start">
+                <Paper sx={{ p: 1.25, borderRadius: '12px 12px 12px 2px' }} elevation={0}>
+                  <CircularProgress size={14} />
+                </Paper>
+              </Box>
+            )}
+            <Box ref={chatEndRef} />
           </Box>
 
           <Stack
