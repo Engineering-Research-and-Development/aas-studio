@@ -391,7 +391,7 @@ export function validateAAS(
         if (!items?.length) return;
         const dup = new Set<string>();
         items.forEach((c, ci) => {
-          const cp = `${ep} → ${label}${c.idShort ? ` ${c.idShort}` : `[${ci}]`}`;
+          const cp = `${ep} → ${label}${c.idShort || `[${ci}]`}`;
           if (c.idShort && dup.has(c.idShort)) addFinding(errors, cp, `"${c.idShort}" duplicato`, 'EL-003');
           if (c.idShort) dup.add(c.idShort);
           walkElement(c, cp, asListItems);

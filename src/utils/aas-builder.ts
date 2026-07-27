@@ -161,10 +161,11 @@ function mapSubmodelElement(el: SubmodelElement): IDTASubmodelElement {
         ...(el.max !== undefined && el.max !== '' ? { max: el.max } : {}),
       };
     case 'File':
+      // File.value is optional but must be non-empty when present: omit blanks.
       return {
         ...base,
         modelType: 'File',
-        value: typeof el.value === 'string' ? el.value : '',
+        ...(typeof el.value === 'string' && el.value !== '' ? { value: el.value } : {}),
         contentType: el.contentType || 'application/octet-stream',
       };
     case 'Blob':

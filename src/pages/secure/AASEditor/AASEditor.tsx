@@ -53,7 +53,7 @@ import {
 import VersionHistoryDrawer from './components/VersionHistoryDrawer';
 import GraphView from './components/GraphView';
 
-import { useAASContext, XsdValueType, AASModel, SubmodelTemplate, SubmodelElement, SubmodelElementChild, ElementType, validateAAS, ValidationResult } from '@/context/AASContext';
+import { useAASContext, XsdValueType, AASModel, SubmodelTemplate, SubmodelElement, SubmodelElementChild, ElementType, validateAAS, ValidationResult, ValidationFinding } from '@/context/AASContext';
 import { useDialogContext } from '@/context/DialogContext';
 import { useAASVersioning } from '@/hooks/useAASVersioning';
 import { useCustomSnackbar } from '@/context/SnackbarContext';
@@ -98,6 +98,56 @@ const activateOnKey = (fn: () => void) => (e: KeyboardEvent) => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); }
 };
 
+// Findings address rows as `SM[0] "AID" → Interface → created`. Boundary-safe
+// matchers: a row owns a finding whose path is exactly its own, and contains one
+// whose path continues with a further " → " step. Plain startsWith/includes let
+// "SM[1]" swallow "SM[10]" and "Interface" swallow "InterfaceTemplateForHTTP".
+const inSubtreeOf = (rowPath: string) => (f: ValidationFinding) =>
+  f.path === rowPath || f.path.startsWith(`${rowPath} → `);
+
+// Message for a finding shown at `rowPath`: findings bubbling up from a deeper
+// element are prefixed with their relative path so the exact field is named.
+const findingLabel = (rowPath: string, f: ValidationFinding) =>
+  f.path === rowPath ? f.msg : `${f.path.slice(rowPath.length + 3)}: ${f.msg}`;
+
+// In an OPEN container, findings a rendered child row will display move down to
+// it. Everything else stays on the container: its own findings, findings for
+// elements that have no row (TPL-001 "missing element" points at an idShort that
+// doesn't exist) and statement/annotation/variable groups (never rendered as rows).
+const undelegated = (rowPath: string, children: SubmodelElement[] | undefined) => {
+  const labels = new Set((children ?? []).map((c, i) => c.idShort || `[${i}]`));
+  return (f: ValidationFinding) => {
+    if (f.path === rowPath) return true;
+    const step = f.path.slice(rowPath.length + 3).split(' → ')[0];
+    return !labels.has(step);
+  };
+};
+
+// Inline error/warning lines under a row.
+function FindingLines({ rowPath, errors, warnings, px = 0 }: {
+  rowPath: string;
+  errors: ValidationFinding[];
+  warnings: ValidationFinding[];
+  px?: number;
+}) {
+  return (
+    <>
+      {errors.map((f, fi) => (
+        <Stack key={`e${fi}`} direction="row" alignItems="center" spacing={0.5} sx={{ px, pb: 0.5 }}>
+          <ErrorOutlineRounded sx={{ fontSize: 13, color: 'error.main', flexShrink: 0 }} />
+          <Typography variant="caption" color="error.main" fontFamily="monospace">{findingLabel(rowPath, f)}</Typography>
+        </Stack>
+      ))}
+      {warnings.map((f, fi) => (
+        <Stack key={`w${fi}`} direction="row" alignItems="center" spacing={0.5} sx={{ px, pb: 0.5 }}>
+          <WarningAmberRounded sx={{ fontSize: 13, color: 'warning.main', flexShrink: 0 }} />
+          <Typography variant="caption" color="warning.main" fontFamily="monospace">{findingLabel(rowPath, f)}</Typography>
+        </Stack>
+      ))}
+    </>
+  );
+}
+
 // Per-row structural actions: edit, delete and — for containers — add child.
 function RowActions({ onEdit, onAddChild, onDelete }: {
   onEdit: () => void;
@@ -139,6 +189,11 @@ interface ChildRowsProps {
   children: SubmodelElementChild[];
   path: number[];
   parentType: ElementType;
+  /** Validation path of the parent row (`SM[0] "AID" → Interface → …`). */
+  parentValPath: string;
+  /** Findings already filtered to the parent's subtree. */
+  errors: ValidationFinding[];
+  warnings: ValidationFinding[];
   expanded: Set<string>;
   onToggle: (key: string) => void;
   onUpdate: (smId: string, elIdx: number, path: number[], field: string, value: string) => void;
@@ -146,7 +201,7 @@ interface ChildRowsProps {
   onRequestDeleteElement: (smId: string, path: number[], name: string) => void;
 }
 
-function ChildRows({ smId, elIdx, children, path, parentType, expanded, onToggle, onUpdate, onOpenElementForm, onRequestDeleteElement }: ChildRowsProps) {
+function ChildRows({ smId, elIdx, children, path, parentType, parentValPath, errors, warnings, expanded, onToggle, onUpdate, onOpenElementForm, onRequestDeleteElement }: ChildRowsProps) {
   const { t } = useTranslation();
   return (
     <>
@@ -156,13 +211,25 @@ function ChildRows({ smId, elIdx, children, path, parentType, expanded, onToggle
         const isContainer = ch.type === 'SubmodelElementCollection' || ch.type === 'SubmodelElementList';
         const key = `${smId}:${elIdx}:${childPath.join('.')}`;
         const open = expanded.has(key);
+        const valPath = `${parentValPath} → ${ch.idShort || `[${ci}]`}`;
+        const chErrors = errors.filter(inSubtreeOf(valPath));
+        const chWarnings = warnings.filter(inSubtreeOf(valPath));
+        // Open containers delegate nested findings to the child rows below;
+        // leaves and collapsed containers show everything (with relative path).
+        const delegate = isContainer && open;
+        const shownErrors = delegate ? chErrors.filter(undelegated(valPath, ch.children)) : chErrors;
+        const shownWarnings = delegate ? chWarnings.filter(undelegated(valPath, ch.children)) : chWarnings;
         return (
           <Box key={ci}>
             <Stack
               direction="row"
               alignItems="center"
               spacing={0.75}
-              sx={{ py: 0.4 }}
+              sx={(theme) => ({
+                py: 0.4,
+                ...(chErrors.length > 0 && { bgcolor: alpha(theme.palette.error.main, 0.08) }),
+                ...(chErrors.length === 0 && chWarnings.length > 0 && { bgcolor: alpha(theme.palette.warning.main, 0.08) }),
+              })}
               {...(isContainer && {
                 role: 'button',
                 tabIndex: 0,
@@ -216,6 +283,7 @@ function ChildRows({ smId, elIdx, children, path, parentType, expanded, onToggle
                 onDelete={() => onRequestDeleteElement(smId, fullPath, ch.idShort || ch.type)}
               />
             </Stack>
+            <FindingLines rowPath={valPath} errors={shownErrors} warnings={shownWarnings} />
             {isContainer && (
               <Collapse in={open} unmountOnExit>
                 <Box sx={{ pl: 2 }}>
@@ -226,6 +294,9 @@ function ChildRows({ smId, elIdx, children, path, parentType, expanded, onToggle
                       children={ch.children}
                       path={childPath}
                       parentType={ch.type}
+                      parentValPath={valPath}
+                      errors={chErrors}
+                      warnings={chWarnings}
                       expanded={expanded}
                       onToggle={onToggle}
                       onUpdate={onUpdate}
@@ -314,12 +385,14 @@ const ElementRow = memo(function ElementRow({
     el.type === 'Operation' ? 'info.main' : 'primary.main';
   const elKey = `${smId}:${ei}`;
   const elOpen = expandedElements.has(elKey);
-  const elErrors = validationResult?.errors.filter(
-    f => f.path.startsWith(smPrefix) && f.path.includes(`→ ${el.idShort}`)
-  ) ?? [];
-  const elWarnings = validationResult?.warnings.filter(
-    f => f.path.startsWith(smPrefix) && f.path.includes(`→ ${el.idShort}`)
-  ) ?? [];
+  const valPath = `${smPrefix} → ${el.idShort || `[${ei}]`}`;
+  const elErrors = validationResult?.errors.filter(inSubtreeOf(valPath)) ?? [];
+  const elWarnings = validationResult?.warnings.filter(inSubtreeOf(valPath)) ?? [];
+  // Open containers delegate nested findings to the child rows; leaves and
+  // collapsed containers show everything here, prefixed with the relative path.
+  const delegate = isContainer && elOpen;
+  const shownErrors = delegate ? elErrors.filter(undelegated(valPath, el.children)) : elErrors;
+  const shownWarnings = delegate ? elWarnings.filter(undelegated(valPath, el.children)) : elWarnings;
   const mlv = typeof el.value === 'object' && el.value !== null ? el.value as Record<string, string> : {};
   return (
     <Box
@@ -437,6 +510,9 @@ const ElementRow = memo(function ElementRow({
                 children={el.children}
                 path={[]}
                 parentType={el.type}
+                parentValPath={valPath}
+                errors={elErrors}
+                warnings={elWarnings}
                 expanded={expandedElements}
                 onToggle={onToggleElement}
                 onUpdate={onUpdateChild}
@@ -451,18 +527,7 @@ const ElementRow = memo(function ElementRow({
       )}
 
       {/* Per-element validation messages */}
-      {elErrors.map((f, fi) => (
-        <Stack key={fi} direction="row" alignItems="center" spacing={0.5} sx={{ px: 2.25, pb: 0.5 }}>
-          <ErrorOutlineRounded sx={{ fontSize: 13, color: 'error.main', flexShrink: 0 }} />
-          <Typography variant="caption" color="error.main" fontFamily="monospace">{f.msg}</Typography>
-        </Stack>
-      ))}
-      {elWarnings.map((f, fi) => (
-        <Stack key={fi} direction="row" alignItems="center" spacing={0.5} sx={{ px: 2.25, pb: 0.5 }}>
-          <WarningAmberRounded sx={{ fontSize: 13, color: 'warning.main', flexShrink: 0 }} />
-          <Typography variant="caption" color="warning.main" fontFamily="monospace">{f.msg}</Typography>
-        </Stack>
-      ))}
+      <FindingLines rowPath={valPath} errors={shownErrors} warnings={shownWarnings} px={2.25} />
     </Box>
   );
 });
@@ -568,9 +633,11 @@ const SubmodelCard = memo(function SubmodelCard({
   onUpdateSubmodel, onUpdateElement, onUpdateChild, onOpenElementForm, onRequestDeleteElement,
 }: SubmodelCardProps) {
   const { t } = useTranslation();
-  const smPrefix = `SM[${idx}]`;
-  const smErrors = validationResult?.errors.filter(f => f.path.startsWith(smPrefix)) ?? [];
-  const smWarnings = validationResult?.warnings.filter(f => f.path.startsWith(smPrefix)) ?? [];
+  // Full prefix, matching both validators' path convention. The bare `SM[${idx}]`
+  // startsWith match let SM[1] swallow SM[10]'s findings.
+  const smPrefix = `SM[${idx}] "${sm.idShort || '?'}"`;
+  const smErrors = validationResult?.errors.filter(inSubtreeOf(smPrefix)) ?? [];
+  const smWarnings = validationResult?.warnings.filter(inSubtreeOf(smPrefix)) ?? [];
   const elements = sm.elements || [];
   return (
     <Paper
