@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import { useApiWrapper } from '@/api/apiWrapper';
+import { useSessionContext } from '@/context/SessionContext';
 import { checkSubmodelAgainstTemplate, findTemplate } from '@/utils/template-registry';
 
 // ═══════════════════════════════════
@@ -453,6 +454,7 @@ const AASContext = createContext<AASContextType | null>(null);
 
 export function AASProvider({ children }: { children: ReactNode }) {
   const api = useApiWrapper();
+  const { operator } = useSessionContext();
   // useApiWrapper returns a fresh object every render; route calls through a ref
   // so the callbacks below stay referentially stable.
   const apiRef = useRef(api);
@@ -503,6 +505,12 @@ export function AASProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const listRes = await apiRef.current.get<{ total: number; documents: any[] }>('/v1/aas');
+      // apiWrapper never throws: on 401/refresh-failure/network error it returns
+      // an { status: 'Error' } envelope. Treat that as "could not load" and bail
+      // WITHOUT touching state or localStorage — otherwise a transient auth/network
+      // failure would overwrite the cached list with an empty one and make a
+      // populated DB look empty.
+      if (listRes.status === 'Error' || (listRes.statusCode ?? 0) >= 400) return;
       const documents: any[] = listRes.data?.documents ?? [];
 
       const serverModels = await Promise.all(
@@ -548,7 +556,15 @@ export function AASProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => { refreshModels(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Load the list only once the session is authenticated. AASProvider mounts at
+  // the app root (above the login flow), so firing on bare mount could hit /v1/aas
+  // with no/expired token and get a silent failure. Re-runs on login and on token
+  // refresh; when there is no token, stop the initial spinner instead of hanging.
+  const authToken = operator.auth_token;
+  useEffect(() => {
+    if (authToken) refreshModels();
+    else setLoading(false);
+  }, [authToken, refreshModels]);
 
   const currentModel = availableModels.find(m => m.id === selectedModelId) || availableModels[0];
 
