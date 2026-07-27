@@ -104,6 +104,8 @@ export interface SubmodelElement {
   messageTopic?: string;                      // BasicEventElement
   observed?: string;                          // BasicEventElement (first key value)
   qualifiers?: ElementQualifier[];
+  /** EU regulation article reference (e.g. "EU 2023/1542, Annex XIII"). */
+  legalRef?: string;
   children?: SubmodelElement[];               // SEC | SEL
 }
 

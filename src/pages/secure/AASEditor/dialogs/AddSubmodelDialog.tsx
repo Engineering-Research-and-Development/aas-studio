@@ -31,6 +31,8 @@ import {
   DeleteOutlineRounded,
   EditRounded,
   ErrorOutlineRounded,
+  GavelRounded,
+  RefreshRounded,
   SchemaRounded,
   SearchRounded,
   SendRounded,
@@ -38,160 +40,25 @@ import {
   WidgetsRounded,
 } from '@mui/icons-material';
 
-import type { AxiosInstance } from 'axios';
 import type { SubmodelTemplate, SubmodelElement } from '@/context/AASContext';
 import { useApiManager } from '@/api/apiManger';
-import { extractSemanticId, mapElement } from '@/utils/aas-mapper';
 import { registerTemplate } from '@/utils/template-registry';
+import { REGULATION_TEMPLATES, instantiateRegulationElements } from '@/utils/regulation-templates';
+import {
+  type CatalogEntry,
+  clearCatalogCaches,
+  fetchCatalog,
+  fetchSubmodelTemplate,
+  getCachedCatalog,
+} from '@/utils/idta-catalog';
 import ElementFormDialog from './ElementFormDialog';
 
-// ── IDTA catalog ─────────────────────────────────────────────────────────────
-
-const RAW_BASE =
-  'https://raw.githubusercontent.com/admin-shell-io/submodel-templates/main/';
-
-interface CatalogEntry {
-  id: string;
-  name: string;
-  version: string;
-  idtaCode: string;
-  fileType: 'Template' | 'Example' | 'Sample' | 'Generic';
-  metamodel: string;  // e.g. "3.0", "3.1" — extensible for future versions
-  path: string;
-  downloadUrl: string;
-  category: string;
-  thumbnailUrl?: string; // template cover from the repo's docs images, when present
-}
-
-let catalogCache: CatalogEntry[] | null = null;
+// ── IDTA catalog: shared client in @/utils/idta-catalog ──────────────────────
 
 const CUSTOM_CATEGORIES = [
   'Identification', 'Technical', 'Documentation', 'Maintenance', 'Sustainability',
   'Structure', 'Operational', 'AI', 'Connectivity', 'Safety', 'Custom',
 ];
-
-function deriveCategory(name: string): string {
-  const n = name.toLowerCase();
-  if (n.includes('nameplate') || n.includes('identification')) return 'Identification';
-  if (n.includes('technical data')) return 'Technical';
-  if (n.includes('document') || n.includes('handover')) return 'Documentation';
-  if (n.includes('maintenance') || n.includes('service')) return 'Maintenance';
-  if (n.includes('carbon') || n.includes('footprint') || n.includes('passport') || n.includes('sustainability')) return 'Sustainability';
-  if (n.includes('bill of') || n.includes('bom') || n.includes('hierarchy')) return 'Structure';
-  if (n.includes('time series') || n.includes('operational')) return 'Operational';
-  if (n.includes('artificial') || n.includes('machine learning')) return 'AI';
-  if (n.includes('asset interface') || n.includes('connectivity')) return 'Connectivity';
-  if (n.includes('safety') || n.includes('alarm')) return 'Safety';
-  return 'Other';
-}
-
-function parseEntry(path: string): CatalogEntry | null {
-  // published/[Name]/[Major]/[Minor]/([Patch]/)?[filename].json
-  const rel = path.replace('published/', '');
-  const parts = rel.split('/');
-  if (parts.length < 3) return null;
-
-  const name = parts[0];
-  const filename = parts[parts.length - 1];
-  const versionParts = parts.slice(1, parts.length - 1);
-  const version = versionParts.join('.');
-
-  const idtaMatch = filename.match(/IDTA[- ](\d+)/i);
-  const idtaCode = idtaMatch ? `IDTA ${idtaMatch[1]}` : '';
-
-  let fileType: CatalogEntry['fileType'] = 'Generic';
-  if (filename.includes('_Template_')) fileType = 'Template';
-  else if (filename.includes('_Example_')) fileType = 'Example';
-  else if (filename.includes('_Sample_')) fileType = 'Sample';
-
-  // Extract metamodel version from suffix, e.g. "forAASMetamodelV3.1" → "3.1"
-  const metamodelMatch = filename.match(/forAASMetamodelV(\d+(?:[._]\d+)*)/i);
-  const metamodel = metamodelMatch ? metamodelMatch[1].replace('_', '.') : '3.0';
-
-  return {
-    id: `${name}__${version}__${fileType}__mm${metamodel}`,
-    name,
-    version,
-    idtaCode,
-    fileType,
-    metamodel,
-    path,
-    downloadUrl: RAW_BASE + path,
-    category: deriveCategory(name),
-  };
-}
-
-async function fetchCatalog(api: AxiosInstance): Promise<CatalogEntry[]> {
-  if (catalogCache) return catalogCache;
-
-  // v2 payload is { paths, images }; a plain array means an older API.
-  const { data } = await api.get<{ data: string[] | { paths: string[]; images?: string[] } }>('/v1/idta/catalog');
-  const raw = data.data;
-  const paths: string[] = Array.isArray(raw) ? raw : raw?.paths ?? [];
-  const images: string[] = Array.isArray(raw) ? [] : raw?.images ?? [];
-
-  // One cover per version folder: the docs image named like "…cover…"
-  // (e.g. SMT-template-cover.svg), skipping the shared IDTA logos.
-  const coverByDir = new Map<string, string>();
-  for (const img of images) {
-    const docsIdx = img.indexOf('/docs/');
-    if (docsIdx < 0) continue;
-    const name = img.slice(img.lastIndexOf('/') + 1);
-    if (!/cover/i.test(name) || /logo/i.test(name)) continue;
-    const dir = img.slice(0, docsIdx);
-    if (!coverByDir.has(dir)) coverByDir.set(dir, img);
-  }
-
-  const entries: CatalogEntry[] = [];
-  for (const p of paths) {
-    const entry = parseEntry(p);
-    if (entry) {
-      const cover = coverByDir.get(p.slice(0, p.lastIndexOf('/')));
-      if (cover) entry.thumbnailUrl = RAW_BASE + cover;
-      entries.push(entry);
-    }
-  }
-
-  entries.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
-  catalogCache = entries;
-  return entries;
-}
-
-// ── AAS JSON → SubmodelTemplate (shared mapper: full types + qualifiers) ─────
-
-// Fetched templates by entry id, so preview + add don't re-download.
-const templateCache = new Map<string, SubmodelTemplate>();
-
-async function fetchSubmodelTemplate(entry: CatalogEntry): Promise<SubmodelTemplate> {
-  const cached = templateCache.get(entry.id);
-  if (cached) return cached;
-
-  const res = await fetch(entry.downloadUrl);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = await res.json() as Record<string, unknown>;
-
-  // IDTA JSON files are wrapped: { assetAdministrationShells, submodels: [...], conceptDescriptions }
-  const submodelsArr = json.submodels as Array<Record<string, unknown>> | undefined;
-  const submodel: Record<string, unknown> = submodelsArr?.[0] ?? json;
-
-  const semanticId =
-    extractSemanticId(submodel.semanticId) || String(submodel.id ?? entry.downloadUrl);
-  const elements = (Array.isArray(submodel.submodelElements) ? submodel.submodelElements : []).map(mapElement);
-
-  const template: SubmodelTemplate = {
-    id: semanticId,
-    idShort: String(submodel.idShort ?? entry.name),
-    semanticId,
-    description: `${entry.name} v${entry.version}`,
-    category: entry.category,
-    elements,
-  };
-  templateCache.set(entry.id, template);
-  // Feed the validation registry: mandatory template elements can now be
-  // cross-checked against working copies with the same semanticId.
-  registerTemplate(template);
-  return template;
-}
 
 function countElements(els: SubmodelElement[] | undefined): number {
   if (!els?.length) return 0;
@@ -220,6 +87,11 @@ function TemplateTree({ els, depth }: { els: SubmodelElement[]; depth: number })
             <Typography variant="caption" color="text.disabled" noWrap sx={{ fontSize: 9 }}>
               {e.type}
             </Typography>
+            {e.legalRef && (
+              <Typography variant="caption" color="secondary.main" noWrap sx={{ fontSize: 8, flexShrink: 0 }}>
+                {e.legalRef}
+              </Typography>
+            )}
           </Stack>
           {e.children?.length ? <TemplateTree els={e.children} depth={depth + 1} /> : null}
         </Box>
@@ -268,12 +140,13 @@ interface AddSubmodelDialogProps {
 export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelDialogProps) {
   const { t } = useTranslation();
   const api = useApiManager();
-  const [tab, setTab] = useState<'catalog' | 'custom'>('catalog');
+  const [tab, setTab] = useState<'catalog' | 'regulation' | 'custom'>('catalog');
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('All');
   const [onlyTemplates, setOnlyTemplates] = useState(true);
   const [metamodelFilter, setMetamodelFilter] = useState<string>('All');
   const [selected, setSelected] = useState<string | null>(null);
+  const [regSelected, setRegSelected] = useState<string | null>(null);
   const [custom, setCustom] = useState({ idShort: '', semanticId: '', description: '', category: 'Custom' });
   const [customElements, setCustomElements] = useState<SubmodelElement[]>([]);
   const [elementForm, setElementForm] = useState<{ mode: 'create' } | { mode: 'edit'; index: number } | null>(null);
@@ -286,6 +159,7 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Structure preview of the selected catalog entry (lazy fetch, cached).
   const [previewTpl, setPreviewTpl] = useState<SubmodelTemplate | null>(null);
@@ -308,8 +182,9 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
 
   useEffect(() => {
     if (!open) return;
-    if (catalogCache) {
-      setCatalog(catalogCache);
+    const cached = getCachedCatalog();
+    if (cached) {
+      setCatalog(cached);
       return;
     }
     setCatalogLoading(true);
@@ -324,7 +199,10 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
   const metamodelVersions = ['All', ...Array.from(new Set(catalog.map(e => e.metamodel))).sort()];
 
   const filtered = catalog.filter(e => {
-    if (onlyTemplates && e.fileType !== 'Template') return false;
+    // "Solo Template" hides only instances carrying demo data (Example/Sample);
+    // Template + Generic definitions (OPC UA, Digital Battery Passport parts,
+    // MTP…) stay visible even when their filename doesn't spell "Template".
+    if (onlyTemplates && (e.fileType === 'Example' || e.fileType === 'Sample')) return false;
     if (metamodelFilter !== 'All' && e.metamodel !== metamodelFilter) return false;
     if (catFilter !== 'All' && e.category !== catFilter) return false;
     if (search) {
@@ -338,7 +216,11 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
     return true;
   });
 
-  const canAdd = tab === 'catalog' ? !!selected : !!custom.idShort.trim();
+  const canAdd = tab === 'catalog'
+    ? !!selected
+    : tab === 'regulation'
+      ? !!regSelected
+      : !!custom.idShort.trim();
 
   const resetState = () => {
     setTab('catalog');
@@ -347,6 +229,8 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
     setOnlyTemplates(true);
     setMetamodelFilter('All');
     setSelected(null);
+    setRegSelected(null);
+    setRefreshing(false);
     setCustom({ idShort: '', semanticId: '', description: '', category: 'Custom' });
     setCustomElements([]);
     setElementForm(null);
@@ -359,6 +243,26 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
   const handleClose = () => {
     resetState();
     onClose();
+  };
+
+  // Force a catalog refresh from GitHub: wipe the server-side Redis cache and
+  // both frontend caches, then re-fetch (the Redis miss re-hydrates from GitHub).
+  const handleRefreshCatalog = async () => {
+    setRefreshing(true);
+    setCatalogError(null);
+    setSelected(null);
+    try {
+      await api.delete('/v1/idta/catalog/cache'); // invalidate Redis
+      clearCatalogCaches();                        // drop frontend catalog+template caches
+      setCatalogLoading(true);
+      const fresh = await fetchCatalog(api);        // re-fetch → GitHub → re-cache
+      setCatalog(fresh);
+    } catch (e: unknown) {
+      setCatalogError(t('addSubmodel.refreshError', { error: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setCatalogLoading(false);
+      setRefreshing(false);
+    }
   };
 
   const handleAdd = async () => {
@@ -383,6 +287,22 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
       } finally {
         setAdding(false);
       }
+      return;
+    }
+    if (tab === 'regulation' && regSelected) {
+      const tpl = REGULATION_TEMPLATES.find(r => r.id === regSelected);
+      if (!tpl) return;
+      // Feed the validation registry so mandatory fields are cross-checked.
+      registerTemplate(tpl);
+      onAdd({
+        id: `${tpl.semanticId}:inst:${Date.now()}`,
+        idShort: tpl.idShort,
+        semanticId: tpl.semanticId,
+        description: tpl.description,
+        category: tpl.category,
+        elements: instantiateRegulationElements(tpl.elements),
+      });
+      handleClose();
       return;
     }
     if (tab === 'custom' && custom.idShort.trim()) {
@@ -462,6 +382,7 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
             sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}
           >
             <Tab value="catalog" label={t('addSubmodel.tabCatalog')} />
+            <Tab value="regulation" label={t('addSubmodel.tabRegulation')} />
             <Tab value="custom" label={t('addSubmodel.tabCustom')} />
           </Tabs>
 
@@ -486,6 +407,17 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
                       },
                     }}
                   />
+                  <Tooltip title={t('addSubmodel.refreshCatalog')}>
+                    <span>
+                      <IconButton
+                        size="small"
+                        onClick={handleRefreshCatalog}
+                        disabled={refreshing || catalogLoading}
+                      >
+                        {refreshing ? <CircularProgress size={16} /> : <RefreshRounded fontSize="small" />}
+                      </IconButton>
+                    </span>
+                  </Tooltip>
                   <Chip
                     label={t('addSubmodel.onlyTemplates')}
                     size="small"
@@ -630,6 +562,55 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
                 )}
               </Box>
             </>
+          ) : tab === 'regulation' ? (
+            <Box flex={1} overflow="auto" px={2} pb={2} pt={1.5}>
+              {REGULATION_TEMPLATES.map(tpl => (
+                <Paper
+                  key={tpl.id}
+                  variant="outlined"
+                  onClick={() => setRegSelected(tpl.id)}
+                  sx={{
+                    p: 1.75,
+                    mb: 0.75,
+                    cursor: 'pointer',
+                    borderColor: regSelected === tpl.id ? 'primary.main' : 'divider',
+                    bgcolor: regSelected === tpl.id ? 'action.selected' : 'background.paper',
+                    '&:hover': { borderColor: 'primary.light' },
+                  }}
+                >
+                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                    <Box sx={{
+                      width: 44, height: 44, borderRadius: 1, flexShrink: 0,
+                      bgcolor: 'action.hover',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <GavelRounded sx={{ fontSize: 20, color: 'secondary.main' }} />
+                    </Box>
+                    <Box flex={1} minWidth={0}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
+                          <Typography variant="subtitle2">{tpl.regulationName}</Typography>
+                          <Chip
+                            label={tpl.regulation}
+                            size="small"
+                            color="secondary"
+                            variant="outlined"
+                            sx={{ fontFamily: 'monospace', fontSize: 9 }}
+                          />
+                        </Stack>
+                        {regSelected === tpl.id && <CheckRounded color="primary" fontSize="small" />}
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
+                        {tpl.description}
+                      </Typography>
+                      <Typography variant="caption" color="text.disabled" display="block" mt={0.25} fontFamily="monospace">
+                        {tpl.legalBasis} · {tpl.category}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Paper>
+              ))}
+            </Box>
           ) : (
             <Stack gap={2} p={2} flex={1} overflow="auto">
               <Stack direction="row" spacing={1.5}>
@@ -798,6 +779,32 @@ export default function AddSubmodelDialog({ open, onClose, onAdd }: AddSubmodelD
                       <TemplateTree els={previewTpl.elements} depth={0} />
                     </>
                   )}
+                </Box>
+              </>
+            );
+          })() : tab === 'regulation' && regSelected ? (() => {
+            const tpl = REGULATION_TEMPLATES.find(r => r.id === regSelected);
+            if (!tpl) return null;
+            return (
+              <>
+                <Stack direction="row" spacing={1} alignItems="center" p={1.75}
+                  sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                  <GavelRounded color="secondary" fontSize="small" />
+                  <Box minWidth={0} flex={1}>
+                    <Typography variant="subtitle2" noWrap lineHeight={1.2}>{tpl.regulationName}</Typography>
+                    <Typography variant="caption" color="text.disabled" fontFamily="monospace" noWrap display="block">
+                      {tpl.regulation} · {tpl.legalBasis}
+                    </Typography>
+                  </Box>
+                </Stack>
+                <Box flex={1} overflow="auto" p={1.5}>
+                  <Typography variant="overline" color="text.disabled" display="block">
+                    {t('addSubmodel.previewTitle')}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" mb={0.75} fontFamily="monospace">
+                    {tpl.idShort} · {t('addSubmodel.previewCount', { count: countElements(tpl.elements) })}
+                  </Typography>
+                  <TemplateTree els={tpl.elements} depth={0} />
                 </Box>
               </>
             );
